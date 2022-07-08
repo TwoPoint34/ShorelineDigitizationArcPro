@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="https://www.ngdc.noaa.gov/metadata/published/xsd/ngdcSchema/schema.xsd">
+   <idinfo>
+      <datsetid>gov.noaa.nmfs.inport:49415</datsetid>
+      <citation>
+         <citeinfo>
+            <pubdate>2012</pubdate>
+            <title>2009 - 2011 CA Coastal Conservancy Coastal Lidar Project: Hydro-flattened Bare Earth DEM</title>
+         </citeinfo>
+      </citation>
+      <descript>
+         <abstract>
+              This metadata record was derived from an ISO format record and may be missing components. See the ISO version for more information.
+                Light Detection and Ranging (LiDAR) data is remotely sensed high-resolution elevation data collected by an airborne collection
+platform. This LiDAR dataset is a survey of Coastal California. The project area consists of approximately 2616 square miles.
+The project design of the LiDAR data acquisition was developed to support a nominal post spacing of 1 meter. Fugro EarthData,
+Inc. acquired 1546 flight lines in 108 lifts between October 2009 and August 2011. LiDAR data collection was performed with two
+Piper Navajo twin engine aircrafts, utilizing a Leica ALS60 MPiA sensor; collecting multiple return x, y, and z as well as
+intensity data. The bare-earth lidar data was used to create hydro-flattened DEMs (Digital Elevation Models) available for
+download from the NOAA OCM Digital Coast.
+
+Original contact information: 
+   Contact Org: NOAA Office for Coastal Management
+   Phone: 843-740-1202
+   Email: coastal.info@noaa.gov
+This data set is a raster file with 2085 columns and 5359 rows and may have been mosaiced, reprojected, and clipped from the original tiles. The data set was generated from a larger data set and includes all valid data within the requested geographic bounds.
+		</abstract>
+         <purpose>These digital data are intended to support the local coastal zone managers in their decision-making processes, including applications such
+as sea level rise.</purpose>
+      </descript>
+      <status>
+         <progress>Complete</progress>
+         <update>asNeeded</update>
+      </status>
+      <spdom>
+         <bounding>
+            <westbc>
+		-123.00516129
+		</westbc>
+            <eastbc>
+		-122.98301696999997
+		</eastbc>
+            <northbc>42.012737</northbc>
+            <southbc>32.521695</southbc>
+         </bounding>
+      </spdom>
+      <keywords>
+         <theme>
+            <themekt>Global Change Master Directory (GCMD) Science Keywords</themekt>
+            <themekey>EARTH SCIENCE &gt; LAND SURFACE &gt; TOPOGRAPHY &gt; TERRAIN ELEVATION &gt; TOPOGRAPHICAL RELIEF MAPS</themekey>
+            <themekey>EARTH SCIENCE &gt; OCEANS &gt; COASTAL PROCESSES &gt; COASTAL ELEVATION</themekey>
+         </theme>
+         <theme>
+            <themekt>Keywords</themekt>
+            <themekey>Bare Earth</themekey>
+            <themekey>Bathymetry/Topography</themekey>
+            <themekey>DEM</themekey>
+            <themekey>Elevation</themekey>
+            <themekey>LiDAR</themekey>
+            <themekey>Model</themekey>
+            <themekey>Surface</themekey>
+            <themekey>Terrain</themekey>
+         </theme>
+         <place>
+            <placekt>Global Change Master Directory (GCMD) Location Keywords</placekt>
+            <placekey>CONTINENT &gt; NORTH AMERICA &gt; UNITED STATES OF AMERICA &gt; CALIFORNIA</placekey>
+         </place>
+         <place>
+            <placekey>California</placekey>
+            <placekey>United States</placekey>
+         </place>
+      </keywords>
+      <accconst>Restriction Code: otherRestrictions;  </accconst>
+      <useconst>Use Limitation: NOAA provides no warranty, nor accepts any liability occurring from any incomplete, incorrect, or misleading data, or from any incorrect, incomplete, or misleading use of the data. It is the responsibility of the user to determine whether or not the data is suitable for the intended purpose.;   Other: 
+		This data set was compiled dynamically, and will exist on https://chs.coast.noaa.gov/pickup/dav/746781/Job746781_CA2009_coastal_DEM.zip until 10 days after 06/30/2022. The file will then be deleted from the system.
+			Cite As: OCM Partners, [Date of Access]: 2009 - 2011 CA Coastal Conservancy Coastal Lidar Project: Hydro-flattened Bare Earth DEM [Data Date Range], https://www.fisheries.noaa.gov/inport/item/49415.;   Other: 
+		This data set was compiled dynamically, and will exist on https://chs.coast.noaa.gov/pickup/dav/746781/Job746781_CA2009_coastal_DEM.zip until 10 days after 06/30/2022. The file will then be deleted from the system.
+			Access Constraints: None | Use Constraints: Users should be aware that temporal changes may have occurred since this data set was collected and some parts of this
+data may no longer represent actual surface conditions. Users should not use this data for critical applications without a full awareness
+of its limitations. | Distribution Liability: Any conclusions drawn from the analysis of this information are not the responsibility of NOAA, the Office for Coastal Management
+or its partners.;   </useconst>
+   </idinfo>
+   <distinfo>
+      <distrib>
+         <cntinfo>
+            <cntorgp>
+               <cntorg>NOAA Office for Coastal Management</cntorg>
+            </cntorgp>
+            <cntaddr>
+               <addrtype>physical and mailing</addrtype>
+               <address>2234 South Hobson Ave</address>
+               <city>Charleston</city>
+               <state>SC</state>
+               <postal>29405-2413</postal>
+            </cntaddr>
+            <cntvoice>(843) 740-1202</cntvoice>
+            <cntemail>coastal.info@noaa.gov</cntemail>
+         </cntinfo>
+      </distrib>
+      <distliab>Unknown </distliab>
+   </distinfo>
+   <metainfo>
+      <metd>20220329</metd>
+      <metc>
+         <cntinfo>
+            <cntperp>
+               <cntorg>OCM Partners</cntorg>
+            </cntperp>
+            <cntaddr>
+               <addrtype>mailing and physical</addrtype>
+            </cntaddr>
+            <cntvoice>missing</cntvoice>
+         </cntinfo>
+      </metc>
+      <metc>
+         <cntinfo>
+            <cntperp>
+               <cntorg>NOAA Office for Coastal Management</cntorg>
+            </cntperp>
+            <cntaddr>
+               <addrtype>mailing and physical</addrtype>
+               <address>2234 South Hobson Ave</address>
+               <city>Charleston</city>
+               <state>SC</state>
+               <postal>29405-2413</postal>
+            </cntaddr>
+            <cntvoice>(843) 740-1202</cntvoice>
+            <cntemail>coastal.info@noaa.gov</cntemail>
+         </cntinfo>
+      </metc>
+      <metstdn>Content Standard for Digital Geospatial Metadata: Extensions for Remote Sensing Metadata</metstdn>
+      <metstdv>FGDC-STD-012-2002</metstdv>
+   </metainfo>
+</metadata>
