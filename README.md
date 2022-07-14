@@ -4,5 +4,4 @@ The shoreline digitization script tool for ArcGIS Pro automates the creation of 
 
 Here is a Youtube introductory and instructional video:
 
-https://youtu.be/N1OttPe4fwc  (part 1)
-https://youtu.be/oLqufgpi28E  (part 2)
+https://youtu.be/XGPG_rll5is
