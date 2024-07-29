@@ -163,15 +163,15 @@ for imageraster in imagerasterlist:  # Loop through list of image rasters to dig
     rasterbasename = descimageraster.baseName
 
     # Unsupervised classification (machine learing) output
-    Input_raster_bands = imageraster
-    unsupclassification = arcpy.sa.IsoClusterUnsupervisedClassification(Input_raster_bands, 2, "", 1)
-    out_unsup = 'UnsupClass'
-    unsupclasscopy = arcpy.management.CopyRaster(unsupclassification, out_unsup)
-    descunsupraster = arcpy.Describe(unsupclasscopy)
-    unsuprasterpath = descunsupraster.catalogPath
-    unsuprastername = descunsupraster.baseName
-    binaryrasterpathlist.append(unsuprasterpath)  # Add catalog path of iso cluster binary raster to list
-    binrasterbnlist.append(unsuprastername)
+#    Input_raster_bands = imageraster
+#    unsupclassification = arcpy.sa.IsoClusterUnsupervisedClassification(Input_raster_bands, 2, "", 1)
+#    out_unsup = 'UnsupClass'
+#    unsupclasscopy = arcpy.management.CopyRaster(unsupclassification, out_unsup)
+#    descunsupraster = arcpy.Describe(unsupclasscopy)
+#    unsuprasterpath = descunsupraster.catalogPath
+#    unsuprastername = descunsupraster.baseName
+#    binaryrasterpathlist.append(unsuprasterpath)  # Add catalog path of iso cluster binary raster to list
+#    binrasterbnlist.append(unsuprastername)
 
     # The script tool can digitize shoreline without the Image Analyst extension, but in such a case the only
     # algorithm used is unsupervised classification.  Other land/water interface detection algorithms require
