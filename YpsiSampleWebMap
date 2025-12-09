@@ -1,0 +1,3666 @@
+<!-- 
+
+STEPS TO PUBLISH AND FORMAT A MAPBOX GL JS WEB MAP IN SQUARESPACE 
+
+Since these steps are sort of I.P., I've copied them into the main GreenInfrastructureToolkit Python script
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>AdaptGeo Interactive Map</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Figtree', sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000; /* above everything */
+  transition: opacity 0.5s ease;
+}
+
+#splash-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Centered content box */
+.splash-content {
+  background: white;
+  padding: 2rem 3rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  text-align: center;
+  max-width: 90%;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #ccc;
+  border-top: 4px solid #333;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 1rem auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#continue-btn {
+  margin-top: 1rem;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+#title-bar {
+  height: 50px;
+  background-color: white;
+  text-align: left;        /* centers the <img> horizontally */
+  padding: 10px 0;           /* white space above and below */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+}
+
+#title-bar img {
+  max-height: 50px; /* or whatever height fits your design */
+  width: auto;
+  display: inline-block;
+}
+
+#menu {
+	position: absolute;
+	top: 94px;
+	right: 10px;
+	z-index: 1001 !important; /* Above map */
+	background-color: white;
+	padding: 10px;
+    min-width: 370px;      /* baseline width */
+    width: auto;           /* allow it to expand */
+    max-width: 415px;
+	transition: transform 0.3s ease;
+	transform: translateX(0); /* Menu initially visible */
+    border-top: 1px solid black;
+}
+
+#menu-content {
+  max-height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#title-bar,
+#menu {
+  display: none;
+}
+
+.tabs {
+  display: flex;
+  position: relative;  /* required for z-index to work */
+  z-index: 2000;       /* higher than the map */
+  margin-top: 70px; /* push tabs below the title bar */
+}
+
+.tab {
+  height: 24px;
+  font-size: 16px;
+  line-height: 24px;
+  display: inline-block;
+  background-color: #d16a4a;
+  color: black;
+  cursor: pointer;
+  flex-grow: 1;
+  text-align: center;
+  padding: 0 20px;
+  overflow: hidden;
+  border-right: 1px solid black;  /* <-- vertical black line */
+  border-left: 1px solid black;
+}
+
+#title-bar,
+.tabs {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* Collapsed state */
+#app.header-collapsed #title-bar,
+#app.header-collapsed .tabs {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+}
+
+#main-content {
+  flex-grow: 1; /* Fills all remaining space */
+  position: absolute; /* So map or overlays can be absolute inside */
+}
+
+.tab.active {
+  background-color: #D3D3D3;
+}
+
+.tab-content {
+  display: none;
+  height: 100vh;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+#content1 {
+  margin-top: 74px;
+  height: max-height;         /* or use number of pixels */
+  overflow-y: auto;           /* enables vertical scrolling */
+  padding: 1em;
+  border: 1px solid #ccc;
+  background-color: #f9f9f9;
+  font-size: 16px;
+}
+
+/* Style for content tab paragraphs */
+#content1 p {
+  line-height: 1.6; /* Adjust this value as needed */
+  margin-bottom: 1em; /* Optional: spacing between paragraphs */
+  font-family: sans-serif;
+}
+
+#header-toggle {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #ccc;
+  width: 50px;
+  height: 50px;
+  font-size: 30px;
+  text-align: center;
+  line-height: 40px; /* centers the icon vertically */
+  cursor: pointer;
+}
+
+.mapboxgl-ctrl-bottom-right {
+  position: absolute !important;  /* needed for z-index to apply */
+  z-index: 99999 !important;       /* very high to beat other UI */
+  bottom: 25px !important; /* move it up from the bottom */
+  right: 10px !important;  /* optional, reassert position */
+}
+
+#map {
+  top: 94px;   /* Adjust this to match the combined height of title bar and tabs... currently, this parameter is not working */
+  visibility: hidden;  /* hide map initially */
+  width: 100%;
+  height: 100%;  
+}
+
+
+#map.visible {
+  visibility: visible; /* show map when ready */
+}
+
+
+#menu.closed {
+	transform: translateX(400px); /* Hide the menu by sliding it out */
+}
+
+/* Style for the image in the menu */
+#menu img {
+	width: 100%;
+	height: auto;
+	margin-bottom: 4px; /* Space below the image */
+}
+
+.menu-container {
+  width: auto;              /* allow container to grow */
+  display: flex;
+  justify-content: flex-start;
+  padding: 3px;
+  background: #f0f0f0;
+  overflow: visible;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;        /* No wrapping */
+  width: auto;
+  box-sizing: border-box;
+  flex-shrink: 0;            /* don’t shrink this */
+}
+
+.menu-item img {
+  max-width: 60px;           /* limit horizontal expansion */
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+
+/* Code below would make parcel polygons layer blank if searching a vector layer (e.g. parcels) for an attribute (e.g. address)
+by adding the layer to the map (map.addSource, then map.addLayer) then running map.queryRenderedFeatures. Instead, we are using a
+parcels geojson file, so we don't need a blank parcels tileset layer that will display the address of the clicked parcel
+
+.blank-item {
+  display: none;
+} */
+
+/* Add space between the search bar and first slider */
+.search-bar {
+  margin-bottom: 12px;
+}
+
+.word-bar {
+  margin-bottom: 5px;
+  height: 20px;
+  line-height: 20px; /* Aligns text vertically */
+  font-weight: bold;
+  background-color: #f0f0f0; /* Optional background for visibility */
+  font-size: 14px; /* Adjust to fit in 20px height */
+  overflow: hidden;
+  white-space: nowrap; /* Prevent wrapping */
+}
+
+.word-bar span {
+  display: inline-block;
+  text-decoration: underline; /*  Underline here */
+}
+
+.word1 {
+  margin-left: 30px;
+  margin-right: 20px; /* Custom spacing */
+}
+
+.word2 {
+  margin-left: 72px;
+  margin-right: 50px; /* Custom spacing */
+}
+
+  /* No margin on last word unless needed */
+  
+
+.legend-icon {
+  width: 60px;    /* fixed width for all legend icons */
+  min-height: 20px;
+  flex-shrink: 0; /* prevent shrinking */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.legend-box {
+  width: 60px;
+  min-height: 20px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.layer-toggle {
+  flex-shrink: 0;      /* Don't shrink when space is tight */
+  width: 16px;
+  height: 16px;
+  margin: 0;           /* Remove default spacing */
+  cursor: pointer;     /* Change cursor on hover */
+}
+
+/* fixed width for labels so sliders start aligned */
+.slider-label {
+  width: 120px;              /* adjust width as needed */
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;      /* prevent label wrapping */
+}
+
+/* Ensure all sliders are same width and aligned */
+.slider {
+  flex-grow: 0;             /* take remaining space */
+  max-width: 175px;         /* exact length for all sliders */
+  min-width: 175px;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+
+input[type="range"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Button for toggling the menu */
+#menuToggle {
+	position: absolute;
+	top: 10px;
+	left: -50px;
+	background-color: #333;
+	color: white;
+	border: none;
+	padding: 5px;
+	cursor: pointer;
+	border-radius: 4px;
+	width: 60px;  /* Double the original width */
+	height: 50px;  /* Double the original height */
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-size: 30px;  /* Increase the font size for the three lines */
+}
+
+.padded-item {
+  padding-top: 8px;  /* Add vertical space just to this item */
+}
+
+/* General styles for the range input */
+input[type="range"] {
+  -webkit-appearance: none;    /* WebKit browsers (Chrome, Safari, Android) */
+  -moz-appearance: none;       /* Firefox */
+  appearance: none;            /* Other browsers */
+  width: 100%;                 /* Full width */
+  height: 10px;                /* Track height */
+  background: #ddd;         /* Grey background for the track */
+  border-radius: 5px;          /* Rounded corners for track */
+  outline: none;               /* Remove focus outline */
+  transition: background 0.3s ease; /* Smooth background transition */
+}
+
+/* WebKit-based browsers (Chrome, Safari, Android) track styling */
+input[type="range"]::-webkit-slider-runnable-track {
+  background: #ddd;         /* Grey background for the track */
+  height: 10px;                /* Track height */
+  border-radius: 5px;          /* Rounded corners */
+}
+
+/* Firefox track styling */
+input[type="range"]::-moz-range-track {
+  background: #ddd;         /* Grey background for the track */
+  height: 10px;                /* Track height */
+  border-radius: 5px;          /* Rounded corners */
+}
+
+/* WebKit-based browsers (Chrome, Safari, Android) thumb styling */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;    /* Remove default appearance */
+  height: 20px;                /* Thumb height */
+  width: 20px;                 /* Thumb width */
+  border-radius: 50%;          /* Circular thumb */
+  background: #457953;         /* Green color for the thumb */
+  cursor: pointer;            /* Pointer cursor on hover */
+  transition: background 0.3s ease; /* Smooth background transition */
+  margin-top: -5px;            /* Adjust to center the thumb vertically */
+}
+
+/* Firefox thumb styling */
+input[type="range"]::-moz-range-thumb {
+  height: 20px;                /* Thumb height */
+  width: 20px;                 /* Thumb width */
+  border-radius: 50%;          /* Circular thumb */
+  background: #457953;         /* Green color for the thumb */
+  cursor: pointer;            /* Pointer cursor on hover */
+}
+
+/* MS Edge and IE track styling */
+input[type="range"]::-ms-track {
+  background: #ddd;         /* Grey background for the track */
+  height: 10px;                /* Track height */
+  border-radius: 5px;          /* Rounded corners */
+  border-color: transparent;   /* Transparent borders */
+  color: transparent;          /* Transparent color */
+  width: 100%;
+}
+
+/* MS Edge and IE thumb styling */
+input[type="range"]::-ms-thumb {
+  height: 20px;                /* Thumb height */
+  width: 20px;                 /* Thumb width */
+  border-radius: 50%;          /* Circular thumb */
+  background: #457953;         /* Green color for the thumb */
+  cursor: pointer;            /* Pointer cursor on hover */
+  margin-top: -5px;            /* Adjust to center the thumb vertically */
+}
+
+
+</style>
+</head>
+<body>
+
+<!-- Fullscreen Modal -->
+<div id="imageModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.85);">
+  <span onclick="closeModal()" style="position:absolute; top:20px; right:30px; color:#fff; font-size:40px; cursor:pointer;">&times;</span>
+  <img id="modalImage" style="max-width:90%; max-height:90%; margin:auto; display:block; position:absolute; top:0; bottom:0; left:0; right:0;">
+</div>
+
+<div id="splash-screen">
+  <div class="splash-content">
+    <h1>Ypsilanti, MI Green Infrastructure Toolkit (GrIT) Example</h1>
+    <p>AdaptGeo Consultants</p>
+    <div class="spinner" id="spinner"></div>
+
+    <button id="continue-btn" style="display: none;">Continue</button>
+  </div>
+</div>
+
+<!-- Adding an svg as the title bar can mess with the map... best to stick to png -->
+<!--     <div class="tab" data-tab="content2">Content 2</div> -->
+<div id="app">
+<!--  <button id="header-toggle" title="Toggle header">≡</button>
+  <div id="title-bar"><img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/1b766dd902a21ce157fb139c4c0732fd68c63ac6/titleBar1.png" alt="Title Image" /></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="map">Map</div>
+    <div class="tab" data-tab="content1">Layer Interpretations</div>
+  </div> -->
+<div id="main-content">
+
+<div id="map" class="tab-content active">
+
+<!-- It is not possible to nest html comments inside other comments.  Therefore, in order to be able to comment out the block 
+starting with <div id="menu">, I am writing all relevant comments before (rather than within) that block.
+
+<!-- Add the image at the top of the menu 
+	<img src="https://github.com/AGgeoviz/AGgeoviz.github.io/blob/main/AG_horiz_green_2400.png?raw=true" alt="Menu Image">
+
+Layer rendering order (last renders on top).  For Boynton Beach GI Toolkit, layer order is as follows:
+	Aerial Image: Don't need to define variables
+	1-Blank Parcel Layer: Not displayed at all, so fine on bottom of layer stack
+	2-Surface Temp:
+	3-Basins:
+	4-City Parcels:
+	5-Sinks:
+	6-Tree Canopy1:
+	7-Tree Canopy2:
+	8-Runoff Channels:
+	9-Parcel Boundary:
+
+In the html line: <input type="text" id="address" placeholder="Enter address" style="flex: 1;" /> , the value for "id" must be 
+matched in the javascript lines starting:
+	const addressInput = document.getElementById('address'); AND
+	document.getElementById('address').addEventListener('keydown', function (e) {   
+
+In the html line: <button id="searchBtn" type="button">Search</button> , the value for "id" must be matched in the javascript line 
+starting:
+	document.getElementById('searchBtn').addEventListener('click', function () {
+
+Per <div class="menu-item blank-item"> :
+	Our initial approach for searching a vector layer (e.g. parcels) for an attribute (e.g. address)
+	required adding the layer to the map (map.addSource, then map.addLayer) then running map.queryRenderedFeatures.  Our current 
+	approach is to instead use a parcels geojson file, so we don't need a blank parcels layer that will display the address of 
+	the clicked parcel. I am keeping these comments in just in case we switch back to the blank tileset approach.
+
+In lines structured like: <input type="range" id="aerial-opacity" min="0" max="1" step="0.1" value="1" class="slider"> , "value"
+sets the initial position of the web map opacity slider.  Setting the actual initial opacity is done during javascript variable 
+definition within <script> -->
+
+
+
+
+<div id="menu">
+	<img src="https://github.com/AGgeoviz/AGgeoviz.github.io/blob/main/AG_horiz_green_2400.png?raw=true" alt="Menu Image">
+	<button id="menuToggle">≡</button>  <!-- Putting toggle outside of menu content hypothetically keeps menu scroll function from messing with toggle button -->
+	<div id="menu-content">
+	  <div class="search-bar" style="display: flex; gap: 8px; align-items: center;">
+	    <input type="text" id="address" placeholder="Enter address" style="flex: 1;" />
+	    <button id="searchBtn" type="button">Search</button>
+	  </div>
+	</div>
+	
+	
+	<div class="word-bar">
+	  <span class="word1">Layer</span>
+	  <span class="word2">Legend</span>
+	  <span class="word3">Transparency</span>
+	</div>
+	
+<!--	<div class="menu-item">
+	  <input type="checkbox" id="aerial-toggle" checked class="layer-toggle">
+	  <label for="aerial-opacity" class="slider-label">Aerial Image:</label>
+	  <input type="range" id="aerial-opacity" min="0" max="1" step="0.1" value="1" class="slider">
+	</div>   -->
+	
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="sinks-toggle" checked class="layer-toggle">
+		<label for="sinks-opacity" class="slider-label">Sinks:</label>
+		<span class="legend-icon">		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/sinks.svg" alt="Legend icon" style="height: 20px;" />
+		</span>
+		<input type="range" id="sinks-opacity" min="0.01" max="100" value="67" class="slider">
+	  </div>
+	</div>	
+	
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="trees-toggle" checked class="layer-toggle">
+		<label for="trees-opacity" class="slider-label">Tree Canopy:</label>
+		<span class="legend-icon">		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/trees.svg" alt="Legend icon" style="height: 20px;" />
+		</span>
+		<input type="range" id="trees-opacity" min="0.01" max="100" value="67" class="slider">
+	  </div>
+	</div>
+
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="ncv-toggle" checked class="layer-toggle">
+		<label for="ncv-opacity" class="slider-label">Non-canopy Veg:</label>
+		<span class="legend-icon">		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/316a43b0b0a587819b3875aa744be39bbe8a719a/ncvsaffron.png" alt="Legend icon" style="height: 20px;" />
+		</span>
+		<input type="range" id="ncv-opacity" min="0.01" max="100" value="67" class="slider">
+	  </div>
+	</div>
+	
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="parceloutline-toggle" checked class="layer-toggle">
+		<label for="parceloutline-opacity" class="slider-label">Parcel Boundary:</label>
+		<span class="legend-icon">		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/parcels.svg" alt="Legend icon" style="height: 20px;" />
+		</span>
+		<input type="range" id="parceloutline-opacity" min="0.01" max="100" value="100" class="slider">
+	  </div>
+	</div>
+
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="bbstreams-toggle" checked class="layer-toggle">
+		<label for="bbstreams-opacity" class="slider-label">Runoff Channels:</label>
+		<span class="legend-icon">		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/runoffChannels.svg" alt="Legend icon" style="height: 50px;" />
+		</span>
+		<input type="range" id="bbstreams-opacity" min="0.01" max="100" value="100" class="slider">
+	  </div>
+	</div>
+
+	<div class="menu-container">
+	  <div class="menu-item">
+		<input type="checkbox" id="temp-toggle" checked class="layer-toggle">
+		<label for="temp-opacity" class="slider-label">Surface Temp:</label>
+		<span class="legend-icon">  		<!-- SVG icon loaded as image -->
+		  <img src="https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/surfTemps.svg" alt="Legend icon" style="height: 50px;" />
+		</span>
+		<input type="range" id="temp-opacity" min="0.01" max="100" value="50" class="slider">
+	  </div>
+	</div>
+
+	<div class="menu-item padded-item">
+	  <label for="style-selector" class="slider-label">Base Map:</label>
+	  <select id="style-selector" class="style-select">
+		<option value="Satellite">Satellite</option>
+		<option value="Streets">Streets</option>
+		<option value="Light">Light</option>
+		<option value="Dark">Dark</option>
+	  </select>
+	</div>
+	
+</div>   <!-- This is the closing <div> tab for the "menu" element -->
+</div>
+
+<div id="content1" class="tab-content">
+<div class="content">
+  <h2></h2>
+  <p>
+Sinks:
+The Sinks layer shows where water is likely to pool during heavy rainfall events.  Sinks represent particularly low-labor and low-cost opportunities for reducing runoff through 
+planting deep-rooted vegetation (incl. trees), mowing less, and/or depaving.<p>
+
+  <p>
+Tree Canopy:
+The Tree Canopy layer identifies where tree canopy is present within an area of interest.  The layer can be used for direct visualization or as an input for various other studies, 
+such as comparing canopy coverage from one neighborhood to another.  The Tree Canopy layer can be compared to the Land Surface Temperature (Surface Temp) layer to mitigate heat 
+islands.  Or, tree canopy (or lack thereof) can be integrated into green stormwater infrastructure design.<p>
+
+  <p>
+Non-Canopy Veg:
+The Non-Canopy Vegetation layer identifies vegetated areas that lack trees.  It is essentially a tree canopy gap analysis except that it goes even further and identifies potential
+tree planting locations that do not require costly depaving.  The Non-Canopy Vegetation layer can help decision-makers to quickly pinpoint low-cost, high-impact tree planting 
+opportunities.  For example, this layer can help maximize the positive impacts of limited funds for heat island mitigation and/or green stormwater infrastructure design.<p>
+
+  <p>
+Runoff Channels:
+This layer shows where runoff is most likely to flow and channelize during heavy rainfall events.  Smaller tributaries are shown in very light blue and the channels they flow into 
+are shown in darker blue.  Arrows indicating flow direction are also included.  Green infrastructure can be most effective when installed in these channels, especially just before 
+channels flow onto paved/impervious surfaces (i.e. "veg the edge").<p>
+
+  <p>
+Surface Temp:
+This layer displays remotely estimated land surface temperature.  Red areas indicate hotter temperatures whereas blue areas indicate cooler.  Any red area can be considered a heat 
+island.</p>
+
+<a href="https://static1.squarespace.com/static/6379360069cad263aadee96b/t/6920a6eeba2e4661899bba97/1763747566314/20251121_AdaptGeo_LeisurevilleHeatAssessment.pdf" target="_blank">Leisureville Heat Report</a>
+
+</div>
+</div>
+
+<!-- <div id="content2" class="tab-content">
+<div class="content">
+  <h2>Non-Map Content 2</h2>
+  <p>This is more content for another tab.</p>
+</div>
+</div> -->
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+<script>
+
+const styles = {
+  "Streets": "mapbox://styles/mapbox/streets-v12",
+  "Satellite": "mapbox://styles/mapbox/standard-satellite",
+  "Light": "mapbox://styles/mapbox/light-v11",
+  "Dark": "mapbox://styles/mapbox/dark-v11"
+};
+
+
+mapboxgl.accessToken = 'pk.eyJ1IjoiYWRhcHRnZW8iLCJhIjoiY2xwdmIwMGlyMDNkZzJrcGsybXh1emFpMSJ9.qeCqoOvHTXJIKF4q80v4CA';
+var map = new mapboxgl.Map({
+	container: 'map',
+	maxZoom: 20,
+	minZoom: 16,
+	zoom: 16,
+	center: [-83.618813, 42.239132],
+    style: styles["Satellite"], // Default style
+});
+
+
+// console.log in the block below prints out (using F12 on opened web map/page):
+
+	// Array(86) [ {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, … ]​
+	// 1: Object { id: "satellite", type: "raster", source: "mapbox-satellite", … }
+
+	// We use the id: in map.setPaintProperty() below
+
+const element = document.getElementById("aerial-opacity");
+
+if (element && map.getLayer('satellitestreets')) {
+  // The element exists — run your code here
+  console.log("Element found!");
+  // Example:
+  map.on('style.load', () => {  
+    document.getElementById('aerial-opacity').addEventListener('input', (e) => {
+    const opacity = parseFloat(e.target.value);
+    map.setPaintProperty('satellitestreets', 'raster-opacity', opacity);
+    });
+  });
+}
+
+// Create empty list for all to-be-defined variables such that the lists can later be looped through and the variables processed
+let tileset_source_list = [];  // Create empty list for tileset_source_##
+let tileset_layerid_list = [];
+let tileset_name_list = [];
+let tileset_type_list = [];
+let tileset_id_list = [];
+let minzoom_list = [];
+let maxzoom_list = [];
+let feature_type_list = [];
+let fill_color_list = [];
+let fill_outline_color_list = [];
+let fill_opacity_list = [];
+let line_color_list = [];
+let line_opacity_list = [];
+let line_width_list = [];
+let line_intfield_list = [];
+let circle_radius_list = [];
+let circle_color_list = [];
+let circle_opacity_list = [];
+let icon_image_list = [];
+let icon_size_list = [];
+let icon_color_list = [];
+let icon_url_list = [];
+let icon_opacity_list = [];
+let BearingField_list = [];
+let raster_opacity_list = [];
+let opacity_id_list = [];
+let checkbox_id_list = [];
+
+
+// Define variables below to add/remove web map layers
+// The last layers added (i.e. last variables defined) will be displayed on top of the web map.  As such, layer order can be changed simply 
+// by changing the numbering of variables and without the need to move the variable code around, which is why the variable numbers below 
+// may not be in order.  It's a pain in the ass manually changing all those numbers, and I could automate it to be less awful, but I'm not 
+// sure if we'll be sticking with mapbox anyhow
+
+// For accurate and reliable address search functionality, we have to use a .geojson layer rather than vector tilesets. Assuming we 
+// want such functionality, "githubGeojsonUrl" below specifies the location of the raw geojson file (typically stored in github). 
+// "AddressSearchField" below indicates the field name we want to search (e.g. address) within the geojson layer.
+// IMPORTANT: Mapbox GL JS only supports GeoJSON in EPSG:4326 !!!
+
+
+// Layer rendering order (last renders on top)
+//Aerial Image: Don't need to define variables
+//1-Blank Parcel Layer: (IF PRESENT) Not displayed at all, so fine on bottom of layer stack
+//2-Surface Temp:
+//3-Basins:
+//4-City Parcels:
+//5-Sinks:
+//6-Tree Canopy1:
+//7-Tree Canopy2:
+//8-Runoff Channels:
+//9-Parcel Boundary:
+
+
+//const githubGeojsonUrl = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/89bfbe2e683b7f96dc889da5c2739c32b96c1af7/BBParcels_ParcelsWithinTargetAndBasins_20250714_EPSG4326.geojson';
+// githubGeojsonUrl is a MANDATORY parameter
+const githubGeojsonUrl = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/d50565d51e594e1208979a2ce6c58b392e9c4756/MoreParcelsWithAddress_20251006.geojsonl';
+const AddressSearchField = 'address';  // Make sure this matches your geojson property.
+const PlaceSearchField = null;  // Make sure this matches your geojson property
+//const flowarrowgeojson = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/StreamPointsWithBearing_20250825.geojsonl'
+	// Adding flow arrows as a geojson (rather than a vector tileset) allows for clustering such that points aren't excessively dense when zoomed out
+	// IMPORTANT: THE GEOJSON FORMAT EXPORTED FROM QGIS IS NOT SUFFICIENT.  PER A .geojsonl, WE MUST MANUALLY ADD {"type": "FeatureCollection", "features": [ AT THE BEGINNING OF 
+	// THE GEOJSON (ALONG WITH CLOSING BRACKET AND BRACE) AS WELL AS COMMAS AFTER EACH FEATURE.  NOT SURE WHAT THE PROTOCOL IS FOR PLAIN OLD .geojson
+	// ALSO IMPORTANT: THE URL CREATED BY MODIFYING THE GITHUB PERMALINK TO raw.githubusercontent (and removing blob) IS OCCASIONALLY WRONG.  SOMETIMES THE CORRECT URL IS THE 
+	// ONE OBTAINED BY CLICKING THE "Raw" BUTTON IN GITHUB.  IT MAY ALSO BE NECESSARY TO FIRST UPLOAD A GEOJSON FILE TO GITHUB THEN REPLACE IT WITH THE MANUALLY-CORRECTED CODE
+	// RATHER THAN ATTEMPTING TO CREATE A GEOJSON FILE IN GITHUB FROM SCRATCH
+
+// Define the categorical WIDTH stops
+const stops = null;  // [  If var line_intfield_## is defined above, then enter the values for the line_width increments (stops) here
+//  [1, 2.0],  // Values 1-7 below represent stream order category ('cat') number.  Values following the comma (e.g. 0.5) are line width.
+//  [2, 3.0],
+//  [3, 4.0],
+//  [4, 5.0],
+//  [5, 6.0],
+//  [6, 7.0],
+//  [7, 8.0]
+//];
+
+// Define the categorical COLOR stops
+const colorStops = [
+  [1, '#e0f3ff'],
+  [2, '#accce8'],
+  [3, '#7896d1'],
+  [4, '#4560b9'],
+  [5, '#003366']
+];
+
+
+var tileset_source_8 = 'channels-tileset-source';
+	// This is where we create a name/object for the Mapbox GL JS tileset source. Any name should work.
+var tileset_layerid_8 = 'channels-tileset-layer';
+	// This is where we create a name/object for the Mapbox GL JS tileset layer. Any name should work.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+//var tileset_name_8 = 'BB_rstreamorder_400thresh_shr-dtljyi';  ACTUAL LAYER  The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_name_8 = 'StreamNetworkMoreParcels_2025-767xg5'; // TEST LAYER  The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_8 = 'vector';
+	// 'vector' or 'raster'
+//var tileset_id_8 = 'mapbox://adaptgeo.7tcx1ig5';  // ACTUAL LAYER
+var tileset_id_8 = 'mapbox://adaptgeo.5du9msls';  // TEST LAYER
+	// Tileset ID displayed in Mapbox by clicking on three dots to right of tileset name.  Hitting the copy button will copy only 
+	// adaptgeo.dpwbajhy, so mapbox:// must be appended
+var minzoom_8 = 16;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_8 = 22;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_8 = 'line';
+	// 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_8 = null;
+	// Desired HEX color code if "feature_type_#" of 'fill'... use 'null' if not applicable
+var fill_outline_color_8 = null;
+	// If feature_type of 'fill', this parameter is required.
+var fill_opacity_8 = null;
+	// If feature_type of 'fill'
+var line_color_8 = null;  // Enter a value for either line_color_## or line_intfield_##, BUT NOT BOTH
+	// If feature_type of 'line'
+var line_opacity_8 = 1.0;
+	// If feature_type of 'line'
+var line_width_8 = 4.0;
+	// If feature_type of 'line'.  ENTER A VALUE FOR EITHER line_width_## or line_intfield_##, BUT NOT BOTH
+var line_intfield_8 = 'Cat_1';  // 'cat' is the category field created when reclassifying stream order values by v.reclass in QGIS
+	// To adjust line segment width by stream order.  ENTER A VALUE FOR EITHER line_width_## or line_intfield_##, BUT NOT BOTH
+var circle_radius_8 = null;
+	// Toy around with this number till reach desired effect
+var circle_color_8 = null;
+	// Desired HEX color code
+var circle_opacity_8 = null;
+	// I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_8 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_8 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_8 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_8 = null;  // Set our icon color
+var icon_opacity_8 = null;  // Set our icon opacity
+var BearingField_8 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_8 = null;
+	// Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_8 = 'bbstreams-opacity';
+	// Same ID as menu item name in <div class="menu-item"> above.  It may be necessary to add/delete menu items.
+var checkbox_id_8 = 'bbstreams-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_10 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_10 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_10 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_10 = null;  // 'vector' or 'raster'
+var tileset_id_10 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_10 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_10 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_10 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_10 = null; // If feature_type of 'fill'
+var fill_outline_color_10 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_10 = null; // If feature_type of 'fill'
+var line_color_10 = null; // If feature_type of 'line'
+var line_opacity_10 = null; // If feature_type of 'line'
+var line_width_10 = null; // If feature_type of 'line'
+var line_intfield_10 = null;  // To adjust line segment width by stream order
+var circle_radius_10 = null;  // Toy around with this number till reach desired effect
+var circle_color_10 = null;  // Desired HEX color code
+var circle_opacity_10 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_10 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_10 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_10 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_10 = null;  // Set our icon color
+var icon_opacity_10 = null;  // Set our icon opacity
+var BearingField_10 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_10 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_10 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_10 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_12 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_12 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_12 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_12 = null;  // 'vector' or 'raster'
+var tileset_id_12 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_12 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_12 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_12 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_12 = null; // If feature_type of 'fill'
+var fill_outline_color_12 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_12 = null; // If feature_type of 'fill'
+var line_color_12 = null; // If feature_type of 'line'
+var line_opacity_12 = null; // If feature_type of 'line'
+var line_width_12 = null; // If feature_type of 'line'
+var line_intfield_12 = null;  // To adjust line segment width by stream order
+var circle_radius_12 = null;  // Toy around with this number till reach desired effect
+var circle_color_12 = null;  // Desired HEX color code
+var circle_opacity_12 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_12 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_12 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_12 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_12 = null;  // Set our icon color
+var icon_opacity_12 = null;  // Set our icon opacity
+var BearingField_12 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_12 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_12 = null;  // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_12 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_11 = 'flowarrow-tileset-source';
+	// This is where we create a name/object for the Mapbox GL JS tileset source. Any name should work.
+var tileset_layerid_11 = 'flowarrow-tileset-layer';
+	// This is where we create a name/object for the Mapbox GL JS tileset layer. Any name should work.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_11 = 'FinalPointsWithBearing_YpsiMo-ayths8';
+	// The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_11 = 'vector';
+	// 'vector' or 'raster'
+var tileset_id_11 = 'mapbox://adaptgeo.czcqvd6l';
+	// Tileset ID displayed in Mapbox by clicking on three dots to right of tileset name.  Hitting the copy button will copy only 
+	// adaptgeo.dpwbajhy, so mapbox:// must be appended
+var minzoom_11 = 16;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_11 = 22;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_11 = 'symbol';
+	// 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+	// To represent point features as squares rather than circles, 'symbol' must be used. A vector icon must be created (such as in 
+	// GIMP) and saved as either an SDF PNG or SVG file. We create a new GIMP file and in advanced options we set "Fill with" to 
+	// "transparency." We then create a black square (say 16 x 16 px). Be sure to turn off antialiasing. Export as a .png file and
+	// keep all default settings.
+var fill_color_11 = null;
+	// Desired HEX color code if "feature_type_#" of 'fill'... use 'null' if not applicable
+var fill_outline_color_11 = null;
+	// If feature_type of 'fill', this parameter is required.
+var fill_opacity_11 = null;
+	// If feature_type of 'fill'
+var line_color_11 = null;
+	// If feature_type of 'line'
+var line_opacity_11 = null;
+	// If feature_type of 'line'
+var line_width_11 = null;
+	// If feature_type of 'line'.  ENTER A VALUE FOR EITHER line_width_## or line_intfield_##, BUT NOT BOTH
+var line_intfield_11 = null;  // To adjust line segment width by stream order
+var circle_radius_11 = null;
+	// Toy around with this number till reach desired effect
+var circle_color_11 = null;
+	// Desired HEX color code
+var circle_opacity_11 = null;
+	// I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_11 = 'arrow-icon';  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_11 = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/66d5503f57bce5da3bc7c01b871f7b7b054e784f/flowArrow4.png';  // Raw image url... Must be sdf PNG
+	// from github... url for square, star, triangle, and AdaptGeo logo below
+	// square = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacksquare1.png'
+	// star = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blackstar.png'
+	// triangle = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacktriangle.png'
+	// AdaptGeo logo = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/AG_icon_black_300.png'
+	// trianglepointedtoright = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/8e572ddabf5b91818fb55d8b9a9aa3f489144a5a/blacktrianglepointrightcropped.png'
+	// testarrow = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/5ab786ef352e701ded5447a80af424e1795b01fb/blackarrowpointrightcropped.png'
+	// mikeflowarrowsvg = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/flowArrow.svg'
+	// mikeflowarrowpng = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/b16b512fe7dace4319212246ff94d086edf85383/flowArrow.png'
+	// mikeflowarrow3png = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/3d0fe629d5f3958e80447eb55421ee5296eb0630/flowArrow3.png'
+	// mikeflowarrowpng4 = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/66d5503f57bce5da3bc7c01b871f7b7b054e784f/flowArrow4.png'
+	// Occasionally, semi-transparent anti-aliasing around the edges can appear like overall opacity is lower, especially on 
+	// high-DPI screens or when downscaled.
+var icon_size_11 = 0.75;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_11 = '#1c3664';  // Set icon color
+	// #d16a4a is AdaptGeo orange/red, #457953 is AdaptGeo green, #223C29 is darker green
+var icon_opacity_11 = 1;  // Set our icon opacity
+var BearingField_11 = 'Bearing';  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_11 = null;
+	// Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_11 = 'bbstreams-opacity';
+	// Same id as in <input type="range" id= ... > in <div class="menu-item"> in html above.	
+	// IMPORTANT: IN ORDER FOR THE WEB MAP TO LOAD PROPERLY WHEN NO OPACITY SLIDER IS USED, var opacity_id_## SHOULD NOT BE null
+	// ENTERING ANY VALUE (e.g. 'empty') WILL WORK
+var checkbox_id_11 = 'bbstreams-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_14 = null;
+	// This is where we create a name/object for the Mapbox GL JS tileset source. Any name should work.
+var tileset_layerid_14 = null;
+	// This is where we create a name/object for the Mapbox GL JS tileset layer. Any name should work.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_14 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_14 = null;  // 'vector' or 'raster'
+var tileset_id_14 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_14 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_14 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_14 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_14 = null; // If feature_type of 'fill'
+var fill_outline_color_14 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_14 = null; // If feature_type of 'fill'
+var line_color_14 = null; // If feature_type of 'line'
+var line_opacity_14 = null; // If feature_type of 'line'
+var line_width_14 = null; // If feature_type of 'line'
+var line_intfield_14 = null;  // To adjust line segment width by stream order
+var circle_radius_14 = null;  // Toy around with this number till reach desired effect
+var circle_color_14 = null;  // Desired HEX color code
+var circle_opacity_14 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_14 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_14 = null;  // Raw image url... Must be sdf PNG
+	// from github... url for square, star, triangle, and AdaptGeo logo below
+	// square = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacksquare1.png'
+	// star = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blackstar.png'
+	// triangle = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacktriangle.png'
+	// AdaptGeo logo = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/AG_icon_black_300.png'
+	// trianglepointedtoright = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/8e572ddabf5b91818fb55d8b9a9aa3f489144a5a/blacktrianglepointrightcropped.png'
+	// testarrow = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/5ab786ef352e701ded5447a80af424e1795b01fb/blackarrowpointrightcropped.png'
+	// mikeflowarrowsvg = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/flowArrow.svg'
+	// mikeflowarrowpng = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/b16b512fe7dace4319212246ff94d086edf85383/flowArrow.png'
+	// mikeflowarrowpng4 = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/66d5503f57bce5da3bc7c01b871f7b7b054e784f/flowArrow4.png'
+	// Occasionally, semi-transparent anti-aliasing around the edges can appear like overall opacity is lower, especially on 
+	// high-DPI screens or when downscaled.
+var icon_size_14 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_14 = null;  // Set our icon color
+var icon_opacity_14 = null;  // Set our icon opacity
+var BearingField_14 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_14 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_14 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_14 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_15 = null;
+	// This is where we create a name/object for the Mapbox GL JS tileset source. Any name should work.
+var tileset_layerid_15 = null;
+	// This is where we create a name/object for the Mapbox GL JS tileset layer. Any name should work.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_15 = null;
+	// The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_15 = null;
+	// 'vector' or 'raster'
+var tileset_id_15 =  null;
+	// Tileset ID displayed in Mapbox by clicking on three dots to right of tileset name.  Hitting the copy button will copy only 
+	// adaptgeo.dpwbajhy, so mapbox:// must be appended
+var minzoom_15 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_15 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_15 = null;
+	// 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+	// To represent point features as squares rather than circles, 'symbol' must be used. A vector icon must be created (such as in 
+	// GIMP) and saved as either an SDF PNG or SVG file. We create a new GIMP file and in advanced options we set "Fill with" to 
+	// "transparency." We then create a black square (say 16 x 16 px). Be sure to turn off antialiasing. Export as a .png file and
+	// keep all default settings.
+var fill_color_15 = null;
+	// Desired HEX color code if "feature_type_#" of 'fill'... use 'null' if not applicable
+var fill_outline_color_15 = null;
+	// If feature_type of 'fill', this parameter is required.
+var fill_opacity_15 = null;
+	// If feature_type of 'fill'
+var line_color_15 = null;
+	// If feature_type of 'line'
+var line_opacity_15 = null;
+	// If feature_type of 'line'
+var line_width_15 = null;
+	// If feature_type of 'line'.  ENTER A VALUE FOR EITHER line_width_## or line_intfield_##, BUT NOT BOTH
+var line_intfield_15 = null;  // To adjust line segment width by stream order
+var circle_radius_15 = null;
+	// Toy around with this number till reach desired effect
+var circle_color_15 = null;
+	// Desired HEX color code
+var circle_opacity_15 = null;
+	// I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_15 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_15 = null;  // Raw image url... Must be sdf PNG
+	// from github... url for square, star, triangle, and AdaptGeo logo below
+	// square = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacksquare1.png'
+	// star = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blackstar.png'
+	// triangle = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/blacktriangle.png'
+	// AdaptGeo logo = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/refs/heads/main/AG_icon_black_300.png'
+	// trianglepointedtoright = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/8e572ddabf5b91818fb55d8b9a9aa3f489144a5a/blacktrianglepointrightcropped.png'
+	// testarrow = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/5ab786ef352e701ded5447a80af424e1795b01fb/blackarrowpointrightcropped.png'
+	// mikeflowarrowsvg = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/9f9a3bcff6a316140a23a96461af51baa0b33190/flowArrow.svg'
+	// mikeflowarrowpng = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/b16b512fe7dace4319212246ff94d086edf85383/flowArrow.png'
+	// mikeflowarrowpng4 = 'https://raw.githubusercontent.com/AGgeoviz/AGgeoviz.github.io/66d5503f57bce5da3bc7c01b871f7b7b054e784f/flowArrow4.png'
+	// Occasionally, semi-transparent anti-aliasing around the edges can appear like overall opacity is lower, especially on 
+	// high-DPI screens or when downscaled.
+var icon_size_15 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_15 = null;  // Set icon color
+	// #d16a4a is AdaptGeo orange/red, #457953 is AdaptGeo green, #223C29 is darker green
+var icon_opacity_15 = null;  // Set our icon opacity
+var BearingField_15 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_15 = null;
+	// Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_15 = null;
+	// Same id as in <input type="range" id= ... > in <div class="menu-item"> in html above.	
+	// IMPORTANT: IN ORDER FOR THE WEB MAP TO LOAD PROPERLY WHEN NO OPACITY SLIDER IS USED, var opacity_id_## SHOULD NOT BE null
+	// ENTERING ANY VALUE (e.g. 'empty') WILL WORK
+var checkbox_id_15 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_1 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_1 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_1 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_1 = null;  // 'vector' or 'raster'
+var tileset_id_1 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_1 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_1 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_1 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_1 = null; // If feature_type of 'fill'
+var fill_outline_color_1 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_1 = null; // Initial opacity setting if feature_type of 'fill'
+var line_color_1 = null; // If feature_type of 'line'
+var line_opacity_1 = null; // If feature_type of 'line'
+var line_width_1 = null; // If feature_type of 'line'
+var line_intfield_1 = null;  // To adjust line segment width by stream order
+var circle_radius_1 = null;  // Toy around with this number till reach desired effect
+var circle_color_1 = null;  // Desired HEX color code
+var circle_opacity_1 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_1 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_1 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_1 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_1 = null;  // Set our icon color
+var icon_opacity_1 = null;  // Set our icon opacity
+var BearingField_1 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_1 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_1 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_1 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_2 = 'Temp-tileset-source';  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_2 = 'Temp-tileset-layer';  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_2 = 'YpsiDowntownLSTgrylrdMBtilesB-ccg7n0';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_2 = 'raster';  // 'vector' or 'raster'
+var tileset_id_2 = 'mapbox://adaptgeo.32fef3sw';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_2 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_2 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_2 = 'raster';  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_2 = null; // If feature_type of 'fill'
+var fill_outline_color_2 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_2 = null; // If feature_type of 'fill'
+var line_color_2 = null; // If feature_type of 'line'
+var line_opacity_2 = null; // If feature_type of 'line'
+var line_width_2 = null; // If feature_type of 'line'
+var line_intfield_2 = null;  // To adjust line segment width by stream order
+var circle_radius_2 = null;  // Toy around with this number till reach desired effect
+var circle_color_2 = null;  // Desired HEX color code
+var circle_opacity_2 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_2 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_2 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_2 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_2 = null;  // Set our icon color
+var icon_opacity_2 = null;  // Set our icon opacity
+var BearingField_2 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_2 = 0.5;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_2 = 'temp-opacity'; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_2 = 'temp-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_5 = 'Sinks-tileset-source';  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_5 = 'Sinks-tileset-layer';  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_5 = 'IntraParcelSinks_YpsiDowntown-aabqqq';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_5 = 'vector';  // 'vector' or 'raster'
+var tileset_id_5 = 'mapbox://adaptgeo.35uokfqr';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_5 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_5 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_5 = 'fill';  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_5 = '#9551a0'; // If feature_type of 'fill'
+var fill_outline_color_5 = '#000000'; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_5 = 0.67; // If feature_type of 'fill'
+var line_color_5 = null; // If feature_type of 'line'
+var line_opacity_5 = null; // If feature_type of 'line'
+var line_width_5 = null; // If feature_type of 'line'
+var line_intfield_5 = null;  // To adjust line segment width by stream order
+var circle_radius_5 = null;  // Toy around with this number till reach desired effect
+var circle_color_5 = null;  // Desired HEX color code
+var circle_opacity_5 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_5 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_5 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_5 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_5 = null;  // Set our icon color
+var icon_opacity_5 = null;  // Set our icon opacity
+var BearingField_5 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_5 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_5 = 'sinks-opacity'; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_5 = 'sinks-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_3 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_3 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_3 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_3 = null;  // 'vector' or 'raster'
+var tileset_id_3 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_3 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_3 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_3 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_3 = null; // If feature_type of 'fill'
+var fill_outline_color_3 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_3 = null; // If feature_type of 'fill'
+var line_color_3 = null; // If feature_type of 'line'
+var line_opacity_3 = null; // If feature_type of 'line'
+var line_width_3 = null; // If feature_type of 'line'
+var line_intfield_3 = null;  // To adjust line segment width by stream order
+var circle_radius_3 = null;  // Toy around with this number till reach desired effect
+var circle_color_3 = null;  // Desired HEX color code
+var circle_opacity_3 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_3 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_3 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_3 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_3 = null;  // Set our icon color
+var icon_opacity_3 = null;  // Set our icon opacity
+var BearingField_3 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_3 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_3 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_3 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_9 = 'parceloutline-tileset-source';  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_9 = 'parceloutline-tileset-layer';  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_9 = 'MoreParcelsYpsiBoundaries_202-15xekc';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_9 = 'vector';  // 'vector' or 'raster'
+var tileset_id_9 = 'mapbox://adaptgeo.ai1bz3w8';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_9 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_9 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_9 = 'line';  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_9 = null; // If feature_type of 'fill'
+var fill_outline_color_9 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_9 = null; // If feature_type of 'fill'
+var line_color_9 = '#636363'; // If feature_type of 'line'
+var line_opacity_9 = 1; // If feature_type of 'line'
+var line_width_9 = 1; // If feature_type of 'line'
+var line_intfield_9 = null;  // To adjust line segment width by stream order
+var circle_radius_9 = null;  // Toy around with this number till reach desired effect
+var circle_color_9 = null;  // Desired HEX color code
+var circle_opacity_9 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_9 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_9 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_9 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_9 = null;  // Set our icon color
+var icon_opacity_9 = null;  // Set our icon opacity
+var BearingField_9 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_9 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_9 = 'parceloutline-opacity'; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_9 = 'parceloutline-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_4 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_4 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_4 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_4 = null;  // 'vector' or 'raster'
+var tileset_id_4 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_4 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_4 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_4 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_4 = null; // If feature_type of 'fill'
+var fill_outline_color_4 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_4 = null; // If feature_type of 'fill'
+var line_color_4 = null; // If feature_type of 'line'
+var line_opacity_4 = null; // If feature_type of 'line'
+var line_width_4 = null; // If feature_type of 'line'
+var line_intfield_4 = null;  // To adjust line segment width by stream order
+var circle_radius_4 = null;  // Toy around with this number till reach desired effect
+var circle_color_4 = null;  // Desired HEX color code
+var circle_opacity_4 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_4 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_4 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_4 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_4 = null;  // Set our icon color
+var icon_opacity_4 = null;  // Set our icon opacity
+var BearingField_4 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_4 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_4 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_4 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_6 = 'Trees-tileset-source';  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_6 = 'Trees-tileset-layer';  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_6 = '20251119_TreeCanopy-55vcvu';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_6 = 'vector';  // 'vector' or 'raster'
+var tileset_id_6 = 'mapbox://adaptgeo.3ld3a22r';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_6 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_6 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_6 = 'fill';  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_6 = '#85c441'; // If feature_type of 'fill'
+var fill_outline_color_6 = '#85c441'; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_6 = 0.67; // If feature_type of 'fill'
+var line_color_6 = null; // If feature_type of 'line'
+var line_opacity_6 = null; // If feature_type of 'line'
+var line_width_6 = null; // If feature_type of 'line'
+var line_intfield_6 = null;  // To adjust line segment width by stream order
+var circle_radius_6 = null;  // Toy around with this number till reach desired effect
+var circle_color_6 = null;  // Desired HEX color code
+var circle_opacity_6 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_6 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_6 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_6 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_6 = null;  // Set our icon color
+var icon_opacity_6 = null;  // Set our icon opacity
+var BearingField_6 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_6 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_6 = 'trees-opacity'; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_6 = 'trees-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_7 = 'noncanopyveg-tileset-source';  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_7 = 'noncanopyveg-tileset-layer2';  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_7 = '20251119_VegNonCanopy-1bjckx';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_7 = 'vector';  // 'vector' or 'raster'
+var tileset_id_7 = 'mapbox://adaptgeo.1dct2i7v';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_7 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_7 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_7 = 'fill';  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_7 = '#f4d13d'; // If feature_type of 'fill'
+var fill_outline_color_7 = '#f4d13d'; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_7 = 0.67; // If feature_type of 'fill'
+var line_color_7 = null; // If feature_type of 'line'
+var line_opacity_7 = null; // If feature_type of 'line'
+var line_width_7 = null; // If feature_type of 'line'
+var line_intfield_7 = null;  // To adjust line segment width by stream order
+var circle_radius_7 = null;  // Toy around with this number till reach desired effect
+var circle_color_7 = null;  // Desired HEX color code
+var circle_opacity_7 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_7 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_7 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_7 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_7 = null;  // Set our icon color
+var icon_opacity_7 = null;  // Set our icon opacity
+var BearingField_7 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_7 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_7 = 'ncv-opacity'; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_7 = 'ncv-toggle';  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_13 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_13 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_13 = null;
+//var tileset_name_13 = 'TargetBB_rstreamorder_400thre-cga4pt';  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_13 = null;  // 'vector' or 'raster'
+var tileset_id_13 = null;
+//var tileset_id_13 = 'mapbox://adaptgeo.228l4wv4';  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_13 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_13 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_13 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_13 = null; // If feature_type of 'fill'
+var fill_outline_color_13 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_13 = null; // If feature_type of 'fill'
+var line_color_13 = null; // If feature_type of 'line'
+var line_opacity_13 = null; // If feature_type of 'line'
+var line_width_13 = null; // If feature_type of 'line'
+var line_intfield_13 = null;  // To adjust line segment width by stream order
+// Define the categorical WIDTH stops
+var circle_radius_13 = null;  // Toy around with this number till reach desired effect
+var circle_color_13 = null;
+var circle_opacity_13 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_13 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_13 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_13 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_13 = null;  // Set our icon color
+var icon_opacity_13 = null;  // Set our icon opacity
+var BearingField_13 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_13 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_13 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_13 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_16 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_16 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_16 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_16 = null;  // 'vector' or 'raster'
+var tileset_id_16 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_16 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_16 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_16 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_16 = null; // If feature_type of 'fill'
+var fill_outline_color_16 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_16 = null; // If feature_type of 'fill'
+var line_color_16 = null; // If feature_type of 'line'
+var line_opacity_16 = null; // If feature_type of 'line'
+var line_width_16 = null; // If feature_type of 'line'
+var line_intfield_16 = null;  // To adjust line segment width by stream order
+var circle_radius_16 = null;  // Toy around with this number till reach desired effect
+var circle_color_16 = null;  // Desired HEX color code
+var circle_opacity_16 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_16 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_16 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_16 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_16 = null;  // Set our icon color
+var icon_opacity_16 = null;  // Set our icon opacity
+var BearingField_16 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_16 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_16 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_16 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_17 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_17 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_17 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_17 = null;  // 'vector' or 'raster'
+var tileset_id_17 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_17 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_17 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_17 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_17 = null; // If feature_type of 'fill'
+var fill_outline_color_17 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_17 = null; // If feature_type of 'fill'
+var line_color_17 = null; // If feature_type of 'line'
+var line_opacity_17 = null; // If feature_type of 'line'
+var line_width_17 = null; // If feature_type of 'line'
+var line_intfield_17 = null;  // To adjust line segment width by stream order
+var circle_radius_17 = null;  // Toy around with this number till reach desired effect
+var circle_color_17 = null;  // Desired HEX color code
+var circle_opacity_17 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_17 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_17 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_17 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_17 = null;  // Set our icon color
+var icon_opacity_17 = null;  // Set our icon opacity
+var BearingField_17 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_17 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_17 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_17 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_18 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_18 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_18 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_18 = null;  // 'vector' or 'raster'
+var tileset_id_18 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_18 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_18 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_18 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_18 = null; // If feature_type of 'fill'
+var fill_outline_color_18 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_18 = null; // If feature_type of 'fill'
+var line_color_18 = null; // If feature_type of 'line'
+var line_opacity_18 = null; // If feature_type of 'line'
+var line_width_18 = null; // If feature_type of 'line'
+var line_intfield_18 = null;  // To adjust line segment width by stream order
+var circle_radius_18 = null;  // Toy around with this number till reach desired effect
+var circle_color_18 = null;  // Desired HEX color code
+var circle_opacity_18 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_18 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_18 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_18 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_18 = null;  // Set our icon color
+var icon_opacity_18 = null;  // Set our icon opacity
+var BearingField_18 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_18 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_18 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_18 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_19 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_19 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_19 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_19 = null;  // 'vector' or 'raster'
+var tileset_id_19 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_19 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_19 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_19 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_19 = null; // If feature_type of 'fill'
+var fill_outline_color_19 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_19 = null; // If feature_type of 'fill'
+var line_color_19 = null; // If feature_type of 'line'
+var line_opacity_19 = null; // If feature_type of 'line'
+var line_width_19 = null; // If feature_type of 'line'
+var line_intfield_19 = null;  // To adjust line segment width by stream order
+var circle_radius_19 = null;  // Toy around with this number till reach desired effect
+var circle_color_19 = null;  // Desired HEX color code
+var circle_opacity_19 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_19 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_19 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_19 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_19 = null;  // Set our icon color
+var icon_opacity_19 = null;  // Set our icon opacity
+var BearingField_19 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_19 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_19 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_19 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+var tileset_source_20 = null;  // This is where I create a name/object for the Mapbox GL JS tileset source
+var tileset_layerid_20 = null;  // This is where I create a name/object for the Mapbox GL JS tileset layer.  IF this layer is one of multiple layers that 
+	// are controlled by the same menu opacity slider (e.g. Boynton Beach tree canopy north and south), then the layer id must be 'partial-tileset-layer#'
+var tileset_name_20 = null;  // The name of the tileset as shown in the mapbox data manager under "Vector Layers"... also same as name in JSON recipe
+var tileset_type_20 = null;  // 'vector' or 'raster'
+var tileset_id_20 = null;  // Tileset ID displayed by clicking on three dots to right of tileset name
+var minzoom_20 = null;  // The minimum zoom level at which a layer will be displayed.  For example, a value of 12 here means layer will not be displayed at 11 or below
+var maxzoom_20 = null;  // The maximum zoom level at which a layer will be displayed.  For example, a value of 18 here means layer will not be displayed at 19 or above
+	// If a minzoom value is entered, then maxzoom should not be left null.  If planning to use separate layers for various zoom layers, then the maxzoom value of one 
+	// layer should equal the minzoom value of the next (and vice versa) in order to avoid gaps (e.g. between maxzoom of 19 and minzoom of 20, 19.01 - 19.99 is skipped).
+var feature_type_20 = null;  // 'circle' (point), 'line', 'fill' (polygon), 'raster', 'symbol', or other style options
+var fill_color_20 = null; // If feature_type of 'fill'
+var fill_outline_color_20 = null; // If feature_type of 'fill', this parameter is required.
+var fill_opacity_20 = null; // If feature_type of 'fill'
+var line_color_20 = null; // If feature_type of 'line'
+var line_opacity_20 = null; // If feature_type of 'line'
+var line_width_20 = null; // If feature_type of 'line'
+var line_intfield_20 = null;  // To adjust line segment width by stream order
+var circle_radius_20 = null;  // Toy around with this number till reach desired effect
+var circle_color_20 = null;  // Desired HEX color code
+var circle_opacity_20 = null;  // I believe this is the starting opacity, though 0.75 looks like 1 to me
+var icon_image_20 = null;  // The Name we give to our image. We use icon parameters only if using an SDF image (e.g. square, star) for
+	// point features
+var icon_url_20 = null;  // Raw image url from github... Must be sdf PNG
+var icon_size_20 = null;  // Set our icon size... will likely just have to tinker with this value till it looks right
+var icon_color_20 = null;  // Set our icon color
+var icon_opacity_20 = null;  // Set our icon opacity
+var BearingField_20 = null;  // The name of the bearing/angle field in the flow direction point layer's attribute table
+var raster_opacity_20 = null;  // Initial opacity setting if feature type (a misnomer?) is 'raster'
+var opacity_id_20 = null; // Same ID as menu item name in <div class="menu-item"> above
+var checkbox_id_20 = null;  // Same id as in <input type="checkbox" id= ... > in <div class="menu-item"> in html above.
+
+
+// Add the newly defined variables to the variable lists.  There's probably a less redundant way to do this, but this works for now.
+tileset_source_list.push(tileset_source_1);
+tileset_source_list.push(tileset_source_2);
+tileset_source_list.push(tileset_source_3);
+tileset_source_list.push(tileset_source_4);
+tileset_source_list.push(tileset_source_5);
+tileset_source_list.push(tileset_source_6);
+tileset_source_list.push(tileset_source_7);
+tileset_source_list.push(tileset_source_8);
+tileset_source_list.push(tileset_source_9);
+tileset_source_list.push(tileset_source_10);
+tileset_source_list.push(tileset_source_11);
+tileset_source_list.push(tileset_source_12);
+tileset_source_list.push(tileset_source_13);
+tileset_source_list.push(tileset_source_14);
+tileset_source_list.push(tileset_source_15);
+tileset_source_list.push(tileset_source_16);
+tileset_source_list.push(tileset_source_17);
+tileset_source_list.push(tileset_source_18);
+tileset_source_list.push(tileset_source_19);
+tileset_source_list.push(tileset_source_20);
+
+tileset_layerid_list.push(tileset_layerid_1);
+tileset_layerid_list.push(tileset_layerid_2);
+tileset_layerid_list.push(tileset_layerid_3);
+tileset_layerid_list.push(tileset_layerid_4);
+tileset_layerid_list.push(tileset_layerid_5);
+tileset_layerid_list.push(tileset_layerid_6);
+tileset_layerid_list.push(tileset_layerid_7);
+tileset_layerid_list.push(tileset_layerid_8);
+tileset_layerid_list.push(tileset_layerid_9);
+tileset_layerid_list.push(tileset_layerid_10);
+tileset_layerid_list.push(tileset_layerid_11);
+tileset_layerid_list.push(tileset_layerid_12);
+tileset_layerid_list.push(tileset_layerid_13);
+tileset_layerid_list.push(tileset_layerid_14);
+tileset_layerid_list.push(tileset_layerid_15);
+tileset_layerid_list.push(tileset_layerid_16);
+tileset_layerid_list.push(tileset_layerid_17);
+tileset_layerid_list.push(tileset_layerid_18);
+tileset_layerid_list.push(tileset_layerid_19);
+tileset_layerid_list.push(tileset_layerid_20);
+
+tileset_name_list.push(tileset_name_1);
+tileset_name_list.push(tileset_name_2);
+tileset_name_list.push(tileset_name_3);
+tileset_name_list.push(tileset_name_4);
+tileset_name_list.push(tileset_name_5);
+tileset_name_list.push(tileset_name_6);
+tileset_name_list.push(tileset_name_7);
+tileset_name_list.push(tileset_name_8);
+tileset_name_list.push(tileset_name_9);
+tileset_name_list.push(tileset_name_10);
+tileset_name_list.push(tileset_name_11);
+tileset_name_list.push(tileset_name_12);
+tileset_name_list.push(tileset_name_13);
+tileset_name_list.push(tileset_name_14);
+tileset_name_list.push(tileset_name_15);
+tileset_name_list.push(tileset_name_16);
+tileset_name_list.push(tileset_name_17);
+tileset_name_list.push(tileset_name_18);
+tileset_name_list.push(tileset_name_19);
+tileset_name_list.push(tileset_name_20);
+
+tileset_type_list.push(tileset_type_1);
+tileset_type_list.push(tileset_type_2);
+tileset_type_list.push(tileset_type_3);
+tileset_type_list.push(tileset_type_4);
+tileset_type_list.push(tileset_type_5);
+tileset_type_list.push(tileset_type_6);
+tileset_type_list.push(tileset_type_7);
+tileset_type_list.push(tileset_type_8);
+tileset_type_list.push(tileset_type_9);
+tileset_type_list.push(tileset_type_10);
+tileset_type_list.push(tileset_type_11);
+tileset_type_list.push(tileset_type_12);
+tileset_type_list.push(tileset_type_13);
+tileset_type_list.push(tileset_type_14);
+tileset_type_list.push(tileset_type_15);
+tileset_type_list.push(tileset_type_16);
+tileset_type_list.push(tileset_type_17);
+tileset_type_list.push(tileset_type_18);
+tileset_type_list.push(tileset_type_19);
+tileset_type_list.push(tileset_type_20);
+
+tileset_id_list.push(tileset_id_1);
+tileset_id_list.push(tileset_id_2);
+tileset_id_list.push(tileset_id_3);
+tileset_id_list.push(tileset_id_4);
+tileset_id_list.push(tileset_id_5);
+tileset_id_list.push(tileset_id_6);
+tileset_id_list.push(tileset_id_7);
+tileset_id_list.push(tileset_id_8);
+tileset_id_list.push(tileset_id_9);
+tileset_id_list.push(tileset_id_10);
+tileset_id_list.push(tileset_id_11);
+tileset_id_list.push(tileset_id_12);
+tileset_id_list.push(tileset_id_13);
+tileset_id_list.push(tileset_id_14);
+tileset_id_list.push(tileset_id_15);
+tileset_id_list.push(tileset_id_16);
+tileset_id_list.push(tileset_id_17);
+tileset_id_list.push(tileset_id_18);
+tileset_id_list.push(tileset_id_19);
+tileset_id_list.push(tileset_id_20);
+
+minzoom_list.push(minzoom_1);
+minzoom_list.push(minzoom_2);
+minzoom_list.push(minzoom_3);
+minzoom_list.push(minzoom_4);
+minzoom_list.push(minzoom_5);
+minzoom_list.push(minzoom_6);
+minzoom_list.push(minzoom_7);
+minzoom_list.push(minzoom_8);
+minzoom_list.push(minzoom_9);
+minzoom_list.push(minzoom_10);
+minzoom_list.push(minzoom_11);
+minzoom_list.push(minzoom_12);
+minzoom_list.push(minzoom_13);
+minzoom_list.push(minzoom_14);
+minzoom_list.push(minzoom_15);
+minzoom_list.push(minzoom_16);
+minzoom_list.push(minzoom_17);
+minzoom_list.push(minzoom_18);
+minzoom_list.push(minzoom_19);
+minzoom_list.push(minzoom_20);
+
+maxzoom_list.push(maxzoom_1);
+maxzoom_list.push(maxzoom_2);
+maxzoom_list.push(maxzoom_3);
+maxzoom_list.push(maxzoom_4);
+maxzoom_list.push(maxzoom_5);
+maxzoom_list.push(maxzoom_6);
+maxzoom_list.push(maxzoom_7);
+maxzoom_list.push(maxzoom_8);
+maxzoom_list.push(maxzoom_9);
+maxzoom_list.push(maxzoom_10);
+maxzoom_list.push(maxzoom_11);
+maxzoom_list.push(maxzoom_12);
+maxzoom_list.push(maxzoom_13);
+maxzoom_list.push(maxzoom_14);
+maxzoom_list.push(maxzoom_15);
+maxzoom_list.push(maxzoom_16);
+maxzoom_list.push(maxzoom_17);
+maxzoom_list.push(maxzoom_18);
+maxzoom_list.push(maxzoom_19);
+maxzoom_list.push(maxzoom_20);
+
+feature_type_list.push(feature_type_1);
+feature_type_list.push(feature_type_2);
+feature_type_list.push(feature_type_3);
+feature_type_list.push(feature_type_4);
+feature_type_list.push(feature_type_5);
+feature_type_list.push(feature_type_6);
+feature_type_list.push(feature_type_7);
+feature_type_list.push(feature_type_8);
+feature_type_list.push(feature_type_9);
+feature_type_list.push(feature_type_10);
+feature_type_list.push(feature_type_11);
+feature_type_list.push(feature_type_12);
+feature_type_list.push(feature_type_13);
+feature_type_list.push(feature_type_14);
+feature_type_list.push(feature_type_15);
+feature_type_list.push(feature_type_16);
+feature_type_list.push(feature_type_17);
+feature_type_list.push(feature_type_18);
+feature_type_list.push(feature_type_19);
+feature_type_list.push(feature_type_20);
+
+fill_color_list.push(fill_color_1);
+fill_color_list.push(fill_color_2);
+fill_color_list.push(fill_color_3);
+fill_color_list.push(fill_color_4);
+fill_color_list.push(fill_color_5);
+fill_color_list.push(fill_color_6);
+fill_color_list.push(fill_color_7);
+fill_color_list.push(fill_color_8);
+fill_color_list.push(fill_color_9);
+fill_color_list.push(fill_color_10);
+fill_color_list.push(fill_color_11);
+fill_color_list.push(fill_color_12);
+fill_color_list.push(fill_color_13);
+fill_color_list.push(fill_color_14);
+fill_color_list.push(fill_color_15);
+fill_color_list.push(fill_color_16);
+fill_color_list.push(fill_color_17);
+fill_color_list.push(fill_color_18);
+fill_color_list.push(fill_color_19);
+fill_color_list.push(fill_color_20);
+
+fill_outline_color_list.push(fill_outline_color_1);
+fill_outline_color_list.push(fill_outline_color_2);
+fill_outline_color_list.push(fill_outline_color_3);
+fill_outline_color_list.push(fill_outline_color_4);
+fill_outline_color_list.push(fill_outline_color_5);
+fill_outline_color_list.push(fill_outline_color_6);
+fill_outline_color_list.push(fill_outline_color_7);
+fill_outline_color_list.push(fill_outline_color_8);
+fill_outline_color_list.push(fill_outline_color_9);
+fill_outline_color_list.push(fill_outline_color_10);
+fill_outline_color_list.push(fill_outline_color_11);
+fill_outline_color_list.push(fill_outline_color_12);
+fill_outline_color_list.push(fill_outline_color_13);
+fill_outline_color_list.push(fill_outline_color_14);
+fill_outline_color_list.push(fill_outline_color_15);
+fill_outline_color_list.push(fill_outline_color_16);
+fill_outline_color_list.push(fill_outline_color_17);
+fill_outline_color_list.push(fill_outline_color_18);
+fill_outline_color_list.push(fill_outline_color_19);
+fill_outline_color_list.push(fill_outline_color_20);
+
+fill_opacity_list.push(fill_opacity_1);
+fill_opacity_list.push(fill_opacity_2);
+fill_opacity_list.push(fill_opacity_3);
+fill_opacity_list.push(fill_opacity_4);
+fill_opacity_list.push(fill_opacity_5);
+fill_opacity_list.push(fill_opacity_6);
+fill_opacity_list.push(fill_opacity_7);
+fill_opacity_list.push(fill_opacity_8);
+fill_opacity_list.push(fill_opacity_9);
+fill_opacity_list.push(fill_opacity_10);
+fill_opacity_list.push(fill_opacity_11);
+fill_opacity_list.push(fill_opacity_12);
+fill_opacity_list.push(fill_opacity_13);
+fill_opacity_list.push(fill_opacity_14);
+fill_opacity_list.push(fill_opacity_15);
+fill_opacity_list.push(fill_opacity_16);
+fill_opacity_list.push(fill_opacity_17);
+fill_opacity_list.push(fill_opacity_18);
+fill_opacity_list.push(fill_opacity_19);
+fill_opacity_list.push(fill_opacity_20);
+
+line_color_list.push(line_color_1);
+line_color_list.push(line_color_2);
+line_color_list.push(line_color_3);
+line_color_list.push(line_color_4);
+line_color_list.push(line_color_5);
+line_color_list.push(line_color_6);
+line_color_list.push(line_color_7);
+line_color_list.push(line_color_8);
+line_color_list.push(line_color_9);
+line_color_list.push(line_color_10);
+line_color_list.push(line_color_11);
+line_color_list.push(line_color_12);
+line_color_list.push(line_color_13);
+line_color_list.push(line_color_14);
+line_color_list.push(line_color_15);
+line_color_list.push(line_color_16);
+line_color_list.push(line_color_17);
+line_color_list.push(line_color_18);
+line_color_list.push(line_color_19);
+line_color_list.push(line_color_20);
+
+line_opacity_list.push(line_opacity_1);
+line_opacity_list.push(line_opacity_2);
+line_opacity_list.push(line_opacity_3);
+line_opacity_list.push(line_opacity_4);
+line_opacity_list.push(line_opacity_5);
+line_opacity_list.push(line_opacity_6);
+line_opacity_list.push(line_opacity_7);
+line_opacity_list.push(line_opacity_8);
+line_opacity_list.push(line_opacity_9);
+line_opacity_list.push(line_opacity_10);
+line_opacity_list.push(line_opacity_11);
+line_opacity_list.push(line_opacity_12);
+line_opacity_list.push(line_opacity_13);
+line_opacity_list.push(line_opacity_14);
+line_opacity_list.push(line_opacity_15);
+line_opacity_list.push(line_opacity_16);
+line_opacity_list.push(line_opacity_17);
+line_opacity_list.push(line_opacity_18);
+line_opacity_list.push(line_opacity_19);
+line_opacity_list.push(line_opacity_20);
+
+line_width_list.push(line_width_1);
+line_width_list.push(line_width_2);
+line_width_list.push(line_width_3);
+line_width_list.push(line_width_4);
+line_width_list.push(line_width_5);
+line_width_list.push(line_width_6);
+line_width_list.push(line_width_7);
+line_width_list.push(line_width_8);
+line_width_list.push(line_width_9);
+line_width_list.push(line_width_10);
+line_width_list.push(line_width_11);
+line_width_list.push(line_width_12);
+line_width_list.push(line_width_13);
+line_width_list.push(line_width_14);
+line_width_list.push(line_width_15);
+line_width_list.push(line_width_16);
+line_width_list.push(line_width_17);
+line_width_list.push(line_width_18);
+line_width_list.push(line_width_19);
+line_width_list.push(line_width_20);
+
+line_intfield_list.push(line_intfield_1);
+line_intfield_list.push(line_intfield_2);
+line_intfield_list.push(line_intfield_3);
+line_intfield_list.push(line_intfield_4);
+line_intfield_list.push(line_intfield_5);
+line_intfield_list.push(line_intfield_6);
+line_intfield_list.push(line_intfield_7);
+line_intfield_list.push(line_intfield_8);
+line_intfield_list.push(line_intfield_9);
+line_intfield_list.push(line_intfield_10);
+line_intfield_list.push(line_intfield_11);
+line_intfield_list.push(line_intfield_12);
+line_intfield_list.push(line_intfield_13);
+line_intfield_list.push(line_intfield_14);
+line_intfield_list.push(line_intfield_15);
+line_intfield_list.push(line_intfield_16);
+line_intfield_list.push(line_intfield_17);
+line_intfield_list.push(line_intfield_18);
+line_intfield_list.push(line_intfield_19);
+line_intfield_list.push(line_intfield_20);
+
+circle_radius_list.push(circle_radius_1);
+circle_radius_list.push(circle_radius_2);
+circle_radius_list.push(circle_radius_3);
+circle_radius_list.push(circle_radius_4);
+circle_radius_list.push(circle_radius_5);
+circle_radius_list.push(circle_radius_6);
+circle_radius_list.push(circle_radius_7);
+circle_radius_list.push(circle_radius_8);
+circle_radius_list.push(circle_radius_9);
+circle_radius_list.push(circle_radius_10);
+circle_radius_list.push(circle_radius_11);
+circle_radius_list.push(circle_radius_12);
+circle_radius_list.push(circle_radius_13);
+circle_radius_list.push(circle_radius_14);
+circle_radius_list.push(circle_radius_15);
+circle_radius_list.push(circle_radius_16);
+circle_radius_list.push(circle_radius_17);
+circle_radius_list.push(circle_radius_18);
+circle_radius_list.push(circle_radius_19);
+circle_radius_list.push(circle_radius_20);
+
+circle_color_list.push(circle_color_1);
+circle_color_list.push(circle_color_2);
+circle_color_list.push(circle_color_3);
+circle_color_list.push(circle_color_4);
+circle_color_list.push(circle_color_5);
+circle_color_list.push(circle_color_6);
+circle_color_list.push(circle_color_7);
+circle_color_list.push(circle_color_8);
+circle_color_list.push(circle_color_9);
+circle_color_list.push(circle_color_10);
+circle_color_list.push(circle_color_11);
+circle_color_list.push(circle_color_12);
+circle_color_list.push(circle_color_13);
+circle_color_list.push(circle_color_14);
+circle_color_list.push(circle_color_15);
+circle_color_list.push(circle_color_16);
+circle_color_list.push(circle_color_17);
+circle_color_list.push(circle_color_18);
+circle_color_list.push(circle_color_19);
+circle_color_list.push(circle_color_20);
+
+circle_opacity_list.push(circle_opacity_1);
+circle_opacity_list.push(circle_opacity_2);
+circle_opacity_list.push(circle_opacity_3);
+circle_opacity_list.push(circle_opacity_4);
+circle_opacity_list.push(circle_opacity_5);
+circle_opacity_list.push(circle_opacity_6);
+circle_opacity_list.push(circle_opacity_7);
+circle_opacity_list.push(circle_opacity_8);
+circle_opacity_list.push(circle_opacity_9);
+circle_opacity_list.push(circle_opacity_10);
+circle_opacity_list.push(circle_opacity_11);
+circle_opacity_list.push(circle_opacity_12);
+circle_opacity_list.push(circle_opacity_13);
+circle_opacity_list.push(circle_opacity_14);
+circle_opacity_list.push(circle_opacity_15);
+circle_opacity_list.push(circle_opacity_16);
+circle_opacity_list.push(circle_opacity_17);
+circle_opacity_list.push(circle_opacity_18);
+circle_opacity_list.push(circle_opacity_19);
+circle_opacity_list.push(circle_opacity_20);
+
+icon_image_list.push(icon_image_1);
+icon_image_list.push(icon_image_2);
+icon_image_list.push(icon_image_3);
+icon_image_list.push(icon_image_4);
+icon_image_list.push(icon_image_5);
+icon_image_list.push(icon_image_6);
+icon_image_list.push(icon_image_7);
+icon_image_list.push(icon_image_8);
+icon_image_list.push(icon_image_9);
+icon_image_list.push(icon_image_10);
+icon_image_list.push(icon_image_11);
+icon_image_list.push(icon_image_12);
+icon_image_list.push(icon_image_13);
+icon_image_list.push(icon_image_14);
+icon_image_list.push(icon_image_15);
+icon_image_list.push(icon_image_16);
+icon_image_list.push(icon_image_17);
+icon_image_list.push(icon_image_18);
+icon_image_list.push(icon_image_19);
+icon_image_list.push(icon_image_20);
+
+icon_url_list.push(icon_url_1);
+icon_url_list.push(icon_url_2);
+icon_url_list.push(icon_url_3);
+icon_url_list.push(icon_url_4);
+icon_url_list.push(icon_url_5);
+icon_url_list.push(icon_url_6);
+icon_url_list.push(icon_url_7);
+icon_url_list.push(icon_url_8);
+icon_url_list.push(icon_url_9);
+icon_url_list.push(icon_url_10);
+icon_url_list.push(icon_url_11);
+icon_url_list.push(icon_url_12);
+icon_url_list.push(icon_url_13);
+icon_url_list.push(icon_url_14);
+icon_url_list.push(icon_url_15);
+icon_url_list.push(icon_url_16);
+icon_url_list.push(icon_url_17);
+icon_url_list.push(icon_url_18);
+icon_url_list.push(icon_url_19);
+icon_url_list.push(icon_url_20);
+
+icon_size_list.push(icon_size_1);
+icon_size_list.push(icon_size_2);
+icon_size_list.push(icon_size_3);
+icon_size_list.push(icon_size_4);
+icon_size_list.push(icon_size_5);
+icon_size_list.push(icon_size_6);
+icon_size_list.push(icon_size_7);
+icon_size_list.push(icon_size_8);
+icon_size_list.push(icon_size_9);
+icon_size_list.push(icon_size_10);
+icon_size_list.push(icon_size_11);
+icon_size_list.push(icon_size_12);
+icon_size_list.push(icon_size_13);
+icon_size_list.push(icon_size_14);
+icon_size_list.push(icon_size_15);
+icon_size_list.push(icon_size_16);
+icon_size_list.push(icon_size_17);
+icon_size_list.push(icon_size_18);
+icon_size_list.push(icon_size_19);
+icon_size_list.push(icon_size_20);
+
+icon_color_list.push(icon_color_1);
+icon_color_list.push(icon_color_2);
+icon_color_list.push(icon_color_3);
+icon_color_list.push(icon_color_4);
+icon_color_list.push(icon_color_5);
+icon_color_list.push(icon_color_6);
+icon_color_list.push(icon_color_7);
+icon_color_list.push(icon_color_8);
+icon_color_list.push(icon_color_9);
+icon_color_list.push(icon_color_10);
+icon_color_list.push(icon_color_11);
+icon_color_list.push(icon_color_12);
+icon_color_list.push(icon_color_13);
+icon_color_list.push(icon_color_14);
+icon_color_list.push(icon_color_15);
+icon_color_list.push(icon_color_16);
+icon_color_list.push(icon_color_17);
+icon_color_list.push(icon_color_18);
+icon_color_list.push(icon_color_19);
+icon_color_list.push(icon_color_20);
+
+icon_opacity_list.push(icon_opacity_1);
+icon_opacity_list.push(icon_opacity_2);
+icon_opacity_list.push(icon_opacity_3);
+icon_opacity_list.push(icon_opacity_4);
+icon_opacity_list.push(icon_opacity_5);
+icon_opacity_list.push(icon_opacity_6);
+icon_opacity_list.push(icon_opacity_7);
+icon_opacity_list.push(icon_opacity_8);
+icon_opacity_list.push(icon_opacity_9);
+icon_opacity_list.push(icon_opacity_10);
+icon_opacity_list.push(icon_opacity_11);
+icon_opacity_list.push(icon_opacity_12);
+icon_opacity_list.push(icon_opacity_13);
+icon_opacity_list.push(icon_opacity_14);
+icon_opacity_list.push(icon_opacity_15);
+icon_opacity_list.push(icon_opacity_16);
+icon_opacity_list.push(icon_opacity_17);
+icon_opacity_list.push(icon_opacity_18);
+icon_opacity_list.push(icon_opacity_19);
+icon_opacity_list.push(icon_opacity_20);
+
+BearingField_list.push(BearingField_1);
+BearingField_list.push(BearingField_2);
+BearingField_list.push(BearingField_3);
+BearingField_list.push(BearingField_4);
+BearingField_list.push(BearingField_5);
+BearingField_list.push(BearingField_6);
+BearingField_list.push(BearingField_7);
+BearingField_list.push(BearingField_8);
+BearingField_list.push(BearingField_9);
+BearingField_list.push(BearingField_10);
+BearingField_list.push(BearingField_11);
+BearingField_list.push(BearingField_12);
+BearingField_list.push(BearingField_13);
+BearingField_list.push(BearingField_14);
+BearingField_list.push(BearingField_15);
+BearingField_list.push(BearingField_16);
+BearingField_list.push(BearingField_17);
+BearingField_list.push(BearingField_18);
+BearingField_list.push(BearingField_19);
+BearingField_list.push(BearingField_20);
+
+
+raster_opacity_list.push(raster_opacity_1);
+raster_opacity_list.push(raster_opacity_2);
+raster_opacity_list.push(raster_opacity_3);
+raster_opacity_list.push(raster_opacity_4);
+raster_opacity_list.push(raster_opacity_5);
+raster_opacity_list.push(raster_opacity_6);
+raster_opacity_list.push(raster_opacity_7);
+raster_opacity_list.push(raster_opacity_8);
+raster_opacity_list.push(raster_opacity_9);
+raster_opacity_list.push(raster_opacity_10);
+raster_opacity_list.push(raster_opacity_11);
+raster_opacity_list.push(raster_opacity_12);
+raster_opacity_list.push(raster_opacity_13);
+raster_opacity_list.push(raster_opacity_14);
+raster_opacity_list.push(raster_opacity_15);
+raster_opacity_list.push(raster_opacity_16);
+raster_opacity_list.push(raster_opacity_17);
+raster_opacity_list.push(raster_opacity_18);
+raster_opacity_list.push(raster_opacity_19);
+raster_opacity_list.push(raster_opacity_20);
+
+opacity_id_list.push(opacity_id_1);
+opacity_id_list.push(opacity_id_2);
+opacity_id_list.push(opacity_id_3);
+opacity_id_list.push(opacity_id_4);
+opacity_id_list.push(opacity_id_5);
+opacity_id_list.push(opacity_id_6);
+opacity_id_list.push(opacity_id_7);
+opacity_id_list.push(opacity_id_8);
+opacity_id_list.push(opacity_id_9);
+opacity_id_list.push(opacity_id_10);
+opacity_id_list.push(opacity_id_11);
+opacity_id_list.push(opacity_id_12);
+opacity_id_list.push(opacity_id_13);
+opacity_id_list.push(opacity_id_14);
+opacity_id_list.push(opacity_id_15);
+opacity_id_list.push(opacity_id_16);
+opacity_id_list.push(opacity_id_17);
+opacity_id_list.push(opacity_id_18);
+opacity_id_list.push(opacity_id_19);
+opacity_id_list.push(opacity_id_20);
+
+checkbox_id_list.push(checkbox_id_1);
+checkbox_id_list.push(checkbox_id_2);
+checkbox_id_list.push(checkbox_id_3);
+checkbox_id_list.push(checkbox_id_4);
+checkbox_id_list.push(checkbox_id_5);
+checkbox_id_list.push(checkbox_id_6);
+checkbox_id_list.push(checkbox_id_7);
+checkbox_id_list.push(checkbox_id_8);
+checkbox_id_list.push(checkbox_id_9);
+checkbox_id_list.push(checkbox_id_10);
+checkbox_id_list.push(checkbox_id_11);
+checkbox_id_list.push(checkbox_id_12);
+checkbox_id_list.push(checkbox_id_13);
+checkbox_id_list.push(checkbox_id_14);
+checkbox_id_list.push(checkbox_id_15);
+checkbox_id_list.push(checkbox_id_16);
+checkbox_id_list.push(checkbox_id_17);
+checkbox_id_list.push(checkbox_id_18);
+checkbox_id_list.push(checkbox_id_19);
+checkbox_id_list.push(checkbox_id_20);
+
+// In order to search the parcel vector layer's address attribute (rather than using the apparently very unreliable mapbox 
+// geocoding service), we cannot simply search the address attribute in a mapbox tileset.  Rather we have to host the parcels 
+// layer as a geojson file in github (apparently easier than trying to host it in squarespace).  Chat GPT sapys that the url 
+// for githubGeojsonUrl should start with https://raw.githubusercontent.com/.  I was able to find such a url 
+// by clicking on the geojson layer in the github table of contents, then right-clicking on the same layer's button in the 
+// menu at the left and selecting "inspect." The url was nested within the "inspector" log.  Perhaps more simply yet, we should 
+// be able to construct the raw url by appending "https://raw.githubusercontent.com/" to the "permalink" url minus "github.com"
+// and "blob"
+// IMPORTANT: THE GEOJSON FORMAT EXPORTED FROM QGIS IS NOT SUFFICIENT.  PER A .geojsonl, WE MUST MANUALLY ADD {"type": "FeatureCollection", "features": [ AT THE BEGINNING OF 
+// THE GEOJSON (ALONG WITH CLOSING BRACKET AND BRACE) AS WELL AS COMMAS AFTER EACH FEATURE.  NOT SURE WHAT THE PROTOCOL IS FOR PLAIN OLD .geojson
+// ALSO IMPORTANT: THE URL CREATED BY MODIFYING THE GITHUB PERMALINK TO raw.githubusercontent (and removing blob) IS OCCASIONALLY WRONG.  SOMETIMES THE CORRECT URL IS THE 
+// ONE OBTAINED BY CLICKING THE "Raw" BUTTON IN GITHUB.  IT MAY ALSO BE NECESSARY TO FIRST UPLOAD A GEOJSON FILE TO GITHUB THEN REPLACE IT WITH THE MANUALLY-CORRECTED CODE
+// RATHER THAN ATTEMPTING TO CREATE A GEOJSON FILE IN GITHUB FROM SCRATCH
+// IMPORTANT: Mapbox GL JS only supports GeoJSON in EPSG:4326 !!!  THAT SAID, THE BEST COURSE OF ACTION MAY BE TO REMOVE THE CRS FROM THE GEOJSON FILE ENTIRELY
+
+
+// Add a popup to the map
+var popup = new mapboxgl.Popup({
+	closeButton: false
+});
+
+
+const customLayerDefs = []; // Stores all custom layer definitions. Everytime a user selects a mapbox style (basemap), the map 
+// layers must be reloaded. We create the customLayerDefs list so that reloading the layers will not require executing the 
+// entire code loop below
+const splash = document.getElementById("splash-screen");
+const titlebar = null;
+const menuelement = document.getElementById("menu");
+
+
+map.on('load', function() {  // Once map loads, execute the nested function(s)
+
+
+
+    if (splash) {
+		// Hide spinner
+		document.getElementById('spinner').style.display = 'none';
+
+		// Show continue button
+		const continueBtn = document.getElementById('continue-btn');
+		continueBtn.style.display = 'inline-block';
+
+		// When button is clicked
+		continueBtn.addEventListener('click', () => {
+		  document.getElementById('splash-screen').remove();
+		  document.getElementById('map').classList.add('visible');
+		  if (titlebar) {
+			document.getElementById('title-bar').style.display = 'block'; }
+		  if (menuelement) {
+			document.getElementById('menu').style.display = 'block'; }
+		});
+	} else {
+			document.getElementById('map').classList.add('visible');
+			if (titlebar) {
+			  document.getElementById('title-bar').style.display = 'block'; }
+			if (menuelement) {
+			  document.getElementById('menu').style.display = 'block'; }
+		}
+
+	map.resize()
+
+
+	// Add scale bar in the bottom-left corner
+	var scale = new mapboxgl.ScaleControl({
+		maxWidth: 200,
+		unit: 'imperial'  // Use 'metric' for metric units
+	});
+	map.addControl(scale, 'bottom-left');
+
+
+	// Add toggle functionality for the menu
+	const menuToggle = document.getElementById('menuToggle');
+
+	if (menuelement) {
+		menuToggle.addEventListener('click', () => {
+			menuelement.classList.toggle('closed'); // Toggle the 'closed' class to slide the menu
+		});
+	}
+
+
+
+//	document.getElementById('header-toggle').addEventListener('click', function () {
+//	  const app = document.getElementById('app');
+//	  app.classList.toggle('header-collapsed');
+
+	  // Optionally change icon/text
+//	  this.textContent = app.classList.contains('header-collapsed') ? '≡' : '≡';
+//	  this.title = app.classList.contains('header-collapsed') ? 'Show header' : 'Hide header';
+//	});
+
+
+
+	// Function to disable layer click events and pop-ups when opacity is 0
+	function setLayerVisibility(layerId, opacity) {
+		if (opacity === 0) {
+			map.setLayoutProperty(layerId, 'visibility', 'none');
+			// Remove pop-up if opacity is 0
+			popup.remove();
+		} else {
+			map.setLayoutProperty(layerId, 'visibility', 'visible');
+		}
+	}
+
+
+	for (let i = 1; i <= tileset_source_list.length; i++) {  // We're simply establishing a counter here, so any list could be used
+
+	  const tilesource = window["tileset_source_" + i];
+	  const tiletype = window["tileset_type_" + i];
+	  const tileid = window["tileset_id_" + i];
+	  const tilename = window["tileset_name_" + i];
+	  const tilelayerid = window["tileset_layerid_" + i];
+	  const minzoom = window["minzoom_" + i];
+	  const maxzoom = window["maxzoom_" + i];
+	  const featuretype = window["feature_type_" + i];
+	  const circleradius = window["circle_radius_" + i];
+	  const circlecolor = window["circle_color_" + i];
+	  const circleopacity = window["circle_opacity_" + i];
+	  const iconimage = window["icon_image_" + i];
+	  const iconurl = window["icon_url_" + i];	  
+	  const iconsize = window["icon_size_" + i];
+	  const iconcolor = window["icon_color_" + i];
+	  const iconopacity = window["icon_opacity_" + i];
+	  const bearingfield = window["BearingField_" + i];
+	  const linecolor = window["line_color_" + i];
+	  const lineopacity = window["line_opacity_" + i];
+	  const linewidth = window["line_width_" + i];
+	  const lineinterpolfield = window["line_intfield_" + i];
+	  const lineWidthExpression = ['interpolate', ['linear'], ['get', lineinterpolfield]];
+	  if (stops != null) {
+	    stops.forEach((stop, index) => {
+		  if (Array.isArray(stop)) {
+		    lineWidthExpression.push(...stop);
+		  } else {
+		    console.warn(`Invalid stop at index ${index}:`, stop);
+		  }
+	    });
+	  }
+	  
+	  // Build the line-color expression using `match`
+	  const lineColorExpression = ['match', ['get', lineinterpolfield]];
+	  if (colorStops != null) {
+	    colorStops.forEach((stop, index) => {
+	      if (Array.isArray(stop) && stop.length === 2) {
+		    lineColorExpression.push(stop[0], stop[1]);
+	      } else {
+		    console.warn(`Invalid color stop at index ${index}:`, stop);
+	      }
+	    });
+	  }
+	  // Add a default color if no match is found
+	  lineColorExpression.push('#000000');  // default color (black)	  
+	  
+	  const fillcolor = window["fill_color_" + i];
+	  const filloutline = window["fill_outline_color_" + i];
+	  const fillopacity = window["fill_opacity_" + i];
+	  const rasteropacity = window["raster_opacity_" + i];
+	  const opacityid = window["opacity_id_" + i];
+	  const checkboxid = window["checkbox_id_" + i];
+
+
+	  if (iconurl != null && iconurl.trim().toLowerCase().endsWith('.png')) {
+
+		// Add sdf .png file for non-circle (e.g. square) point features
+		map.loadImage(iconurl, function(error, image) {
+		  if (error) throw error;
+		  map.addImage(iconimage, image, { sdf: true });
+		});
+		  if (map.hasImage(iconimage)) {
+			console.log(`Icon '${iconimage}' is present in the map style.`);
+		  } else {
+			console.warn(`Icon '${iconimage}' is NOT present in the map style. Did you call map.addImage()?`);
+		  }
+	  }
+
+	  if (iconurl != null && iconurl.trim().toLowerCase().endsWith('.svg')) {
+		loadSvgAsImage(iconurl, iconimage);
+	  }
+
+	    // Add tileset source (for both vectors and rasters)
+	  if (tilesource != null && tiletype != null && tileid != null) {  // Only execute code if source, type, and id variables are not blank/null
+		map.addSource(tilesource, {
+		  'type': tiletype,
+		  'url': tileid
+		});
+	  }
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add raster tileset layer
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null &&
+		  rasteropacity != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'paint': {
+		    'raster-opacity': rasteropacity
+		  }
+		});
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'raster-opacity': rasteropacity
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'raster-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'raster-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'raster-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+
+		
+		// Raster layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'raster-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});		  
+		}
+	  }
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;	  
+	  // Add vector tileset layer (points, circles)
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null &&
+		  circleradius != null && circlecolor != null && circleopacity != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'source-layer': tilename,
+		  'paint': {
+			'circle-radius': circleradius,
+			'circle-color': circlecolor,
+			'circle-opacity': circleopacity
+		  }
+		});
+		
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'circle-radius': circleradius,
+			'circle-color': circlecolor,
+			'circle-opacity': circleopacity
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'circle-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'circle-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'circle-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+
+
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'circle-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});
+		}
+	  }
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add vector tileset layer (points, symbols)
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null && iconimage != null && iconsize != null 
+		&& iconcolor != null && iconopacity != null && opacityid != null && bearingfield == null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'source-layer': tilename,
+		  'layout': {
+			'icon-image': iconimage,
+			'icon-size': iconsize
+		  },
+		  'paint': {
+			'icon-color': iconcolor,
+			'icon-opacity': iconopacity
+		  }
+		});
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'icon-color': iconcolor,
+			'icon-opacity': iconopacity
+		  },
+		  icon: {
+			name: iconimage,
+			url: iconurl
+		  },
+		  layout: { 
+			'icon-image': iconimage,
+			'icon-size': iconsize		  
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'icon-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'icon-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'icon-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+
+	
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'icon-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});
+		}
+	  }
+
+console.log({
+  tilesource,
+  tilename,
+  tilelayerid,
+  featuretype,
+  iconimage,
+  iconsize,
+  iconcolor,
+  iconopacity,
+  opacityid,
+  bearingfield,
+  minzoom,
+  maxzoom
+});
+
+
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add vector tileset layer (points, symbols)
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null && iconimage != null && iconsize != null && iconcolor != null 
+		&& iconopacity != null && opacityid != null && bearingfield != null  && minzoom != null && maxzoom != null) {
+
+		console.log('minzoom:', minzoom);
+		console.log('maxzoom:', maxzoom);
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'minzoom': minzoom,
+		  'maxzoom': maxzoom,
+		  'source-layer': tilename,
+		  'layout': {
+			'icon-image': iconimage,
+//			'icon-size': iconsize,
+			'icon-size': iconsize, // [
+//			  'interpolate',
+//			  ['linear'], ['zoom'],
+//			  15, 0.5,
+//			  22, 1.5
+//			],
+			'icon-rotate': ['-', ['get', bearingfield], 90],  // No idea why, but must rotate counter-clockwise 90 degrees
+			'icon-rotation-alignment': 'map',     // ensures rotation follows map orientation
+			'icon-allow-overlap': true
+		  },
+		  'paint': {
+			'icon-color': iconcolor,
+			'icon-opacity': iconopacity
+		  }
+		});
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'minzoom': minzoom,
+		  'maxzoom': maxzoom,
+		  'source-layer': tilename,
+		  paint: {
+			'icon-color': iconcolor,
+			'icon-opacity': iconopacity
+		  },
+		  icon: {
+			name: iconimage,
+			url: iconurl
+		  },
+		  layout: { 
+			'icon-image': iconimage,
+			'icon-size': iconsize,	  
+			'icon-rotate': ['-', ['get', bearingfield], 90],  // No idea why, but must rotate counter-clockwise 90 degrees
+			'icon-rotation-alignment': 'map',     // ensures rotation follows map orientation
+			'icon-allow-overlap': true
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'icon-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'icon-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'icon-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+
+	
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'icon-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});
+		}
+	  }
+
+
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add vector tileset layer (lines)
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null &&
+		  linecolor != null && linewidth != null && lineopacity != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'source-layer': tilename,
+		  'layout': {
+			'line-join': 'round',
+			'line-cap': 'round'
+		  },
+		  'paint': {
+			'line-color': linecolor,
+			'line-width': linewidth,
+			'line-opacity': lineopacity
+		  }
+		});
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'line-color': linecolor,
+			'line-width': linewidth,
+			'line-opacity': lineopacity
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'line-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'line-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'line-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+
+		
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'line-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});	  
+		}
+	  }
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add vector tileset layer (lines, where line width is interpolated (e.g. stream network))
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null && linecolor != null 
+		  && lineopacity != null && lineinterpolfield != null && lineWidthExpression != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  //'minzoom': 19,   This minzoom does not work
+		  //'maxzoom': 22,
+		  'source-layer': tilename,
+		  'paint': {
+			'line-color': linecolor,
+			'line-width': lineWidthExpression,
+			'line-opacity': lineopacity
+		  }
+		});
+
+
+
+	    // Add the manual zoom logic HERE
+	    map.on('zoom', () => {
+		  const zoom = map.getZoom();
+
+		  if (zoom < minzoom || zoom > maxzoom) {
+		    map.setLayoutProperty(tilelayerid, 'visibility', 'none');
+		  } else {
+		    map.setLayoutProperty(tilelayerid, 'visibility', 'visible');
+		  }
+	    });
+
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'line-color': linecolor,
+			'line-width': lineWidthExpression,
+			'line-opacity': lineopacity
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'line-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'line-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'line-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+		
+		
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'line-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});		  
+		}
+	  }
+
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;
+	  // Add vector tileset layer (lines, where line width is interpolated (e.g. stream network))
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null && lineopacity != null 
+		  && linewidth != null && lineinterpolfield != null && lineColorExpression != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'source-layer': tilename,
+		  'paint': {
+			'line-color': lineColorExpression,
+			'line-width': linewidth,
+			'line-opacity': lineopacity
+		  }
+		});
+
+
+
+	    // Add the manual zoom logic HERE
+	    map.on('zoom', () => {
+		  const zoom = map.getZoom();
+
+		  if (zoom < minzoom || zoom > maxzoom) {
+		    map.setLayoutProperty(tilelayerid, 'visibility', 'none');
+		  } else {
+		    map.setLayoutProperty(tilelayerid, 'visibility', 'visible');
+		  }
+	    });
+
+
+
+
+		// Add to customLayerDefs list so that layers can be re-added after removed by setStyle
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'line-color': lineColorExpression,
+			'line-width': linewidth,
+			'line-opacity': lineopacity
+		  },
+		});
+
+
+		const checkbox = document.getElementById(checkboxid);
+		const slider = document.getElementById(opacityid); // Optional opacity slider
+		const layerId = tilelayerid;
+
+		// Store the last non-zero opacity (default to 1)
+		let lastOpacity = 1;
+
+		if (checkbox) {
+		  checkbox.addEventListener('change', () => {
+			if (!map.getLayer(layerId)) return;
+
+			if (checkbox.checked) {
+			  // Restore last known opacity
+			  map.setPaintProperty(layerId, 'line-opacity', lastOpacity);
+			} else {
+			  // Store the current opacity before hiding
+			  const currentOpacity = map.getPaintProperty(layerId, 'line-opacity');
+			  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+			  // Set layer opacity to 0
+			  map.setPaintProperty(layerId, 'line-opacity', 0);
+			}
+
+			// Enable or disable the slider, but do NOT change its value
+			if (slider) slider.disabled = !checkbox.checked;
+		  });
+		}
+		
+		
+		// Vector layer opacity control
+		var LayerOpacity = document.getElementById(opacityid);
+		if (LayerOpacity) {
+		LayerOpacity.addEventListener('input', function(e) {
+			var opacity = parseFloat(e.target.value, 10) / 100;
+			map.setPaintProperty(tilelayerid, 'line-opacity', opacity);
+			setLayerVisibility(tilelayerid, opacity);
+		});		  
+		}
+	  }
+
+
+//		if (tilelayerid != null && lineopacity != null  && opacityid != null
+//		&& (tilelayerid === 'bbstreams-tileset-layer' || tilelayerid === 'flowdirection-tileset-layer')) {			
+
+			// Vector layer opacity control
+//			var LayerOpacity = document.getElementById(opacityid);
+//			if (LayerOpacity) {
+//			LayerOpacity.addEventListener('input', function(e) {
+//				var opacity = parseFloat(e.target.value, 10) / 100;
+				
+				// Update opacity for the first layer... I have hard-coded the runoff channels layer because I believe the need to control 
+				// multiple layers with a single opacity slider to be uncommon
+//				map.setPaintProperty('bbstreams-tileset-layer', 'line-opacity', opacity);
+//				setLayerVisibility('bbstreams-tileset-layer', opacity);
+
+				// Update opacity for the second layer... I have hard-coded the flow direction layer because I believe the need to control 
+				// multiple layers with a single opacity slider to be uncommon
+//				map.setPaintProperty('flowdirection-tileset-layer', 'icon-opacity', opacity);
+//				setLayerVisibility('flowdirection-tileset-layer', opacity);
+//			});
+//			}
+//		}
+
+
+
+	  // In JavaScript, indentation has no effect on code logic. What matters are braces {} and semicolons ;	  
+	  // Add vector tileset layer (polygons)
+	  if (tilesource != null && tilename != null && tilelayerid != null && featuretype != null &&
+		  fillcolor != null && filloutline != null && fillopacity != null && opacityid != null) {
+
+		// Only execute code if source, type, and id variables are not blank/null
+		// The commented-out 'fill-color' block colorizes parcels based on fields/attributes. I had initially hard-coded values 
+		// to colorize city-owned Boynton Beach parcels, and I've left in the code as an example if we choose to do so in the future.
+		map.addLayer({
+		  'id': tilelayerid,
+		  'type': featuretype,
+		  'source': tilesource,
+		  'source-layer': tilename,
+		  'paint': {
+		    'fill-color': fillcolor,
+//			'fill-color': [
+//				  'match',
+//				  ['get', 'OWNER_NAME'],
+//				  'BOYNTON BEACH CITY OF', '#8B2500',
+//				  /* default, non-city-owned parcels */ fillcolor
+//				],
+			'fill-outline-color': filloutline,
+			'fill-opacity': fillopacity
+		  }
+		});
+
+		customLayerDefs.push({
+		  id: tilelayerid,
+		  type: featuretype,
+		  source: {
+			id: tilesource,
+			type: tiletype,
+			url: tileid
+		  },
+		  'source-layer': tilename,
+		  paint: {
+			'fill-color': fillcolor,
+			'fill-outline-color': filloutline,
+			'fill-opacity': fillopacity
+		  },
+		});
+
+			const checkbox = document.getElementById(checkboxid);
+			const slider = document.getElementById(opacityid); // Optional opacity slider
+			const layerId = tilelayerid;
+
+			// Store the last non-zero opacity (default to 1)
+			let lastOpacity = 1;
+
+			if (checkbox) {
+			  checkbox.addEventListener('change', () => {
+				if (!map.getLayer(layerId)) return;
+
+				if (checkbox.checked) {
+				  // Restore last known opacity
+				  map.setPaintProperty(layerId, 'fill-opacity', lastOpacity);
+				} else {
+				  // Store the current opacity before hiding
+				  const currentOpacity = map.getPaintProperty(layerId, 'fill-opacity');
+				  if (currentOpacity > 0) lastOpacity = currentOpacity;
+
+				  // Set layer opacity to 0
+				  map.setPaintProperty(layerId, 'fill-opacity', 0);
+				}
+
+				// Enable or disable the slider, but do NOT change its value
+				if (slider) slider.disabled = !checkbox.checked;
+			  });
+			}
+	  }
+
+	  	if (tilelayerid != null && fillopacity != null  && opacityid != null && tilelayerid != 'partial-tileset-layer1' 
+		&& tilelayerid != 'partial-tileset-layer2') {  
+		// Only execute code if source, type, and id variables are not blank/null
+			
+			
+			// Vector layer opacity control
+			var LayerOpacity = document.getElementById(opacityid);
+			if (LayerOpacity) {
+			LayerOpacity.addEventListener('input', function(e) {
+				var opacity = parseFloat(e.target.value, 10) / 100;
+				map.setPaintProperty(tilelayerid, 'fill-opacity', opacity);
+				setLayerVisibility(tilelayerid, opacity);
+			});		  
+			}
+		}
+
+		if (tilelayerid != null && fillopacity != null  && opacityid != null
+		&& (tilelayerid === 'partial-tileset-layer1' || tilelayerid === 'partial-tileset-layer2')) {
+		//if (tilelayerid != null && tilelayerid === 'partial-tileset-layer1' || tilelayerid === 'partial-tileset-layer2') {  // || is "or"
+			
+
+			// Vector layer opacity control
+			var LayerOpacity = document.getElementById(opacityid);
+			if (LayerOpacity) {
+			LayerOpacity.addEventListener('input', function(e) {
+				var opacity = parseFloat(e.target.value, 10) / 100;
+				
+				// Update opacity for the first layer... I have hard-coded the trees layers because I believe the need to control 
+				// multiple layers with a single opacity slider to be uncommon
+				map.setPaintProperty('partial-tileset-layer1', 'fill-opacity', opacity);
+				setLayerVisibility('partial-tileset-layer1', opacity);
+
+				// Update opacity for the second layer... I have hard-coded the trees layers because I believe the need to control 
+				// multiple layers with a single opacity slider to be uncommon
+				map.setPaintProperty('partial-tileset-layer2', 'fill-opacity', opacity);
+				setLayerVisibility('partial-tileset-layer2', opacity);
+			});
+			}
+		}
+
+
+	  	if (tilelayerid != null && fillopacity != null  && opacityid != null && tilelayerid != 'partial-tileset-layer3' 
+		&& tilelayerid != 'partial-tileset-layer4') {  
+		// Only execute code if source, type, and id variables are not blank/null
+
+		
+			// Vector layer opacity control
+			var LayerOpacity = document.getElementById(opacityid);
+			if (LayerOpacity) {
+			LayerOpacity.addEventListener('input', function(e) {
+				var opacity = parseFloat(e.target.value, 10) / 100;
+				map.setPaintProperty(tilelayerid, 'fill-opacity', opacity);
+				setLayerVisibility(tilelayerid, opacity);
+			});		  
+			}
+		}
+
+		if (tilelayerid != null && fillopacity != null  && opacityid != null
+		&& (tilelayerid === 'partial-tileset-layer3' || tilelayerid === 'partial-tileset-layer4')) {
+		//if (tilelayerid != null && tilelayerid === 'partial-tileset-layer3' || tilelayerid === 'partial-tileset-layer4') {  // || is "or"
+
+
+			// Vector layer opacity control
+			var LayerOpacity = document.getElementById(opacityid);
+			if (LayerOpacity) {
+			LayerOpacity.addEventListener('input', function(e) {
+				var opacity = parseFloat(e.target.value, 10) / 100;
+				
+				// Update opacity for the first layer
+				map.setPaintProperty('partial-tileset-layer3', 'fill-opacity', opacity);
+				setLayerVisibility('partial-tileset-layer3', opacity);
+
+				// Update opacity for the second layer
+				map.setPaintProperty('partial-tileset-layer4', 'fill-opacity', opacity);
+				setLayerVisibility('partial-tileset-layer4', opacity);
+			});
+			}
+		}
+	}
+	
+	map.on('click', async function (e) {
+	  popup.remove();
+
+	  // Ensure geojsonData is loaded
+	  if (!geojsonData) {
+		try {
+		  await loadGeojson();
+		} catch (err) {
+		  console.error('Error loading GeoJSON for click:', err);
+		  return;
+		}
+	  }
+
+	  if (!geojsonData || !geojsonData.features) {
+		console.warn('GeoJSON data not available for click interaction.');
+		return;
+	  }
+
+	  const clickPoint = turf.point([e.lngLat.lng, e.lngLat.lat]);
+
+	  const matchingFeature = geojsonData.features.find(feature =>
+		turf.booleanPointInPolygon(clickPoint, feature)
+	  );
+
+	  if (matchingFeature) {
+		const props = matchingFeature.properties;
+		const placeName = props[PlaceSearchField];
+		const address = props[AddressSearchField];
+
+		const trimmedPlace = placeName?.trim();
+		const trimmedAddress = address?.trim();
+
+		let popupHTML = '';
+
+		if (trimmedPlace) {
+		  popupHTML += `<strong>Name:</strong> ${trimmedPlace}<br>`;
+		}
+
+		if (trimmedAddress) {
+		  popupHTML += `<strong>Address:</strong> ${trimmedAddress}`;
+		}
+
+		// If neither field is present, show fallback message
+		if (!popupHTML) {
+		  popupHTML = `<em>No address found</em>`;
+		}
+
+		const clickLocation = [e.lngLat.lng, e.lngLat.lat];
+
+		popup
+		  .setLngLat(clickLocation)
+		  .setHTML(popupHTML)
+		  .addTo(map);
+	  }
+	});
+  })
+
+
+function applyZoomVisibility() {
+  const currentZoom = map.getZoom();
+
+  for (const layerDef of customLayerDefs) {
+    const layerId = layerDef.id;
+
+    // Skip layers that don't define minzoom or maxzoom
+    if (typeof layerDef.minzoom !== 'number' && typeof layerDef.maxzoom !== 'number') {
+      continue;
+    }
+
+    const minzoom = layerDef.minzoom ?? -Infinity;
+    const maxzoom = layerDef.maxzoom ?? Infinity;
+
+    if (map.getLayer(layerId)) {
+      const visibility = currentZoom >= minzoom && currentZoom <= maxzoom ? 'visible' : 'none';
+      map.setLayoutProperty(layerId, 'visibility', visibility);
+    }
+  }
+}
+
+map.on('zoom', applyZoomVisibility);
+
+
+let geojsonData = null;  // I don't understand this, but it works
+let fuse = null;  // I don't understand this, but it works
+
+// Normalizes user address input so that it can be somewhat fuzzy (e.g. "first" or "1st")
+function normalizeAddress(str) {
+  if (!str || typeof str !== 'string') return ''; // <== prevents crash
+
+  const ordinals = {
+    first: '1st',
+    second: '2nd',
+    third: '3rd',
+    fourth: '4th',
+    fifth: '5th',
+    sixth: '6th',
+    seventh: '7th',
+    eighth: '8th',
+    ninth: '9th',
+    tenth: '10th'
+  };
+
+  return str.toLowerCase()
+    .replace(/\bnorthwest\b/g, 'nw')
+    .replace(/\bsouthwest\b/g, 'sw')
+    .replace(/\bnortheast\b/g, 'ne')
+    .replace(/\bsoutheast\b/g, 'se')
+    .replace(/\bnorth\b/g, 'n')
+    .replace(/\bsouth\b/g, 's')
+    .replace(/\beast\b/g, 'e')
+    .replace(/\bwest\b/g, 'w')
+    .replace(/\bstreet\b/g, 'st')
+    .replace(/\bavenue\b/g, 'ave')
+    .replace(/\bdrive\b/g, 'dr')
+    .replace(/\bboulevard\b/g, 'blvd')
+    .replace(/\bplace\b/g, 'pl')
+    .replace(/\broad\b/g, 'rd')
+    .replace(/\bcourt\b/g, 'ct')
+    .replace(/\blane\b/g, 'ln')
+    .replace(/\./g, '')
+    .replace(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\b/g, (match) => ordinals[match])
+    .replace(/\b(\d+)(st|nd|rd|th)\b/g, '$1')
+    .trim();
+}
+
+
+async function loadGeojson() {
+  try {
+    const res = await fetch(githubGeojsonUrl);
+    geojsonData = await res.json();
+
+    // Add normalized address property for Fuse
+    geojsonData.features.forEach(f => {
+      f.normalizedAddress = normalizeAddress(f.properties[AddressSearchField]);
+	  f.normalizedPlaceName = normalizeAddress(f.properties[PlaceSearchField]);
+    });
+
+    // Add source and layer if not already added
+    if (!map.getSource('geojson-source')) {
+      map.addSource('geojson-source', {
+        type: 'geojson',
+        data: geojsonData
+      });
+
+      map.addLayer({
+        id: 'geojson-layer',
+        type: 'fill',  // Since polygon data
+        source: 'geojson-source',
+        paint: {
+          'fill-color': '#FFFFFF',
+          'fill-outline-color': '#FFFFFF',
+          'fill-opacity': 0.01
+        }
+      });
+    }
+
+
+    // Create Fuse on normalizedAddress field.  Not sure if I need Fuse, since threshold is set to 0 and I've defined normalization
+	// rules in the normalizeAddress() function above, but code is currently based on Fuze and works, so I'll keep it in
+    fuse = new Fuse(geojsonData.features, {
+      keys: ['normalizedAddress', 'normalizedPlaceName'],
+      threshold: 0,
+	  includeMatches: true,
+      ignoreLocation: true,
+      minMatchCharLength: 2
+    });
+
+  } catch (err) {
+    console.error('Error loading GeoJSON:', err);
+    alert('Failed to load data for search.');
+  }
+}
+
+
+async function searchAddress() {
+  const addressInput = document.getElementById('address');
+  const rawSearchTerm = addressInput.value.trim();
+
+  if (!rawSearchTerm) {
+    alert('Please enter an address to search.');
+    return;
+  }
+
+  const searchTerm = normalizeAddress(rawSearchTerm);
+
+  if (!geojsonData || !fuse) {
+    await loadGeojson();
+  }
+
+  const results = fuse.search(searchTerm);
+
+  if (results.length === 0) {
+    const center = map.getCenter();
+    popup
+      .setLngLat(center)
+      .setHTML('<strong>No match found</strong><br>Please try a different search.')
+      .addTo(map);
+    return;
+  }
+
+  const match = results[0].item;
+  const matches = results[0].matches || [];
+
+  const addressValue = match.properties[AddressSearchField];
+  const placeNameValue = match.properties[PlaceSearchField];
+
+  // Determine which field matched (using Fuse's match metadata)
+  let matchedField = 'Match';
+  for (const m of matches) {
+    if (m.key === 'normalizedAddress') {
+      matchedField = 'Address';
+      break;
+    } else if (m.key === 'normalizedPlaceName') {
+      matchedField = 'Name';
+      break;
+    }
+  }
+
+  let center;
+  try {
+    center = turf.centerOfMass(match).geometry.coordinates;
+  } catch (err) {
+    console.error('Error computing centerOfMass:', err);
+    alert('Error calculating map center. Please check the data.');
+    return;
+  }
+
+  const displayValue = matchedField === 'Address'
+    ? addressValue
+    : matchedField === 'Name'
+    ? placeNameValue
+    : 'No value available';
+
+  map.flyTo({
+    center,
+    zoom: 17,
+    speed: 1.5
+  });
+
+let popupHTML = '';
+
+if (placeNameValue && placeNameValue.trim() !== '') {
+  popupHTML += `<strong>Name:</strong> ${placeNameValue}<br>`;
+}
+
+popupHTML += `<strong>Address:</strong> ${addressValue}`;
+
+popup
+  .setLngLat(center)
+  .setHTML(popupHTML)
+  .addTo(map);
+
+}
+
+
+
+<!-- The two modal functions below relate to sizing of an image (e.g. Rec Park) displayed in a popup -->
+function enlargeImage(src) {
+    const modal = document.getElementById("imageModal");
+    const modalImg = document.getElementById("modalImage");
+    modalImg.src = src;
+    modal.style.display = "block";
+}
+
+function closeModal() {
+    document.getElementById("imageModal").style.display = "none";
+}
+
+if (githubGeojsonUrl != null) {  
+	document.addEventListener('DOMContentLoaded', function () {
+	  // document.getElementById() input parameter below should match "id" in html menu (e.g. id="address")
+	  document.getElementById('address').addEventListener('keydown', function (e) {
+		if (e.key === 'Enter') {
+		  console.log("Enter key pressed, triggering search...");
+		  searchAddress('geojson-layer');
+		}
+	  });
+	  
+	  // Search button click triggers the same function
+	  // document.getElementById() input parameter below should match "id" in html menu (e.g. id="searchBtn")
+	  document.getElementById('searchBtn').addEventListener('click', function () {
+		console.log("Search button clicked, triggering search...");
+		searchAddress('geojson-layer');
+	  });
+	});
+}
+
+// Tab switching logic
+const tabsElement = document.querySelector('.tabs');
+const tabs = document.querySelectorAll('.tab');
+const contents = document.querySelectorAll('.tab-content');
+
+if (tabsElement) {
+	tabs.forEach(tab => {
+	  tab.addEventListener('click', () => {
+		console.log('Tab clicked:', tab.dataset.tab);
+		tabs.forEach(t => t.classList.remove('active'));
+		tab.classList.add('active');
+
+		contents.forEach(c => c.classList.remove('active'));
+		document.getElementById(tab.dataset.tab).classList.add('active');
+
+		if (tab.dataset.tab === 'map') {
+		  // Resize the map when switching to map tab
+		  setTimeout(() => map.resize(), 100);
+		}
+	  });
+	});
+}
+
+const nav = new mapboxgl.NavigationControl({
+  showZoom: true,    // show zoom buttons (default)
+  showCompass: false // optionally hide the compass
+});
+map.addControl(nav, 'bottom-right'); // or 'top-left', 'bottom-right', 'bottom-left'
+
+
+console.log('customLayerDefs contents:', customLayerDefs);
+console.log('customLayerDefs length:', customLayerDefs.length);
+
+// Store previous opacities of custom layers (symbol, fill, etc.)
+const savedLayerOpacities = {};
+
+const styleSelector = document.getElementById('style-selector');
+if (styleSelector) {
+  styleSelector.addEventListener('change', function (e) {
+    const selectedStyle = e.target.value;
+
+    for (const layerDef of customLayerDefs) {
+      const layerId = layerDef.id;
+      if (map.getLayer(layerId)) {
+        // Determine the opacity property to check based on layer type
+        let opacityProperty;
+
+        switch (layerDef.type) {
+          case 'raster':
+            opacityProperty = 'raster-opacity';
+            break;
+          case 'symbol':
+            opacityProperty = 'icon-opacity';
+            break;
+          case 'fill':
+            opacityProperty = 'fill-opacity';
+            break;
+          case 'line':
+            opacityProperty = 'line-opacity';
+            break;
+          case 'circle':
+            opacityProperty = 'circle-opacity';
+            break;
+          default:
+            opacityProperty = null; // or skip if you don't want to track
+        }
+
+        if (opacityProperty) {
+          const currentOpacity = map.getPaintProperty(layerId, opacityProperty);
+          savedLayerOpacities[layerId] = {
+            type: layerDef.type,
+            opacityProperty,
+            value: currentOpacity
+          };
+        }
+      }
+    }
+
+    // Apply the new style
+    map.setStyle(styles[selectedStyle]);
+  });
+}
+
+
+map.on('style.load', () => {
+  for (const layerDef of customLayerDefs) {
+    const layerId = layerDef.id;
+
+    // 1. Add source if not already present
+    if (!map.getSource(layerDef.source.id)) {
+      map.addSource(layerDef.source.id, {
+        type: layerDef.source.type,
+        url: layerDef.source.url
+      });
+    }
+
+    // 2. Load icon image for symbol layers (if applicable)
+    if (layerDef.type === 'symbol') {
+      const iconName = layerDef.layout?.['icon-image'];
+      const iconURL = layerDef.icon?.url;
+
+      if (iconName && iconURL && !map.hasImage(iconName)) {
+        map.loadImage(iconURL, (error, image) => {
+          if (error) {
+            console.error('Icon load error:', error);
+            return;
+          }
+          if (!map.hasImage(iconName)) {
+            map.addImage(iconName, image, { sdf: true });
+          }
+        });
+      }
+    }
+
+    // 3. Determine the correct opacity paint property based on layer type
+    let opacityProperty;
+    switch (layerDef.type) {
+      case 'symbol':
+        opacityProperty = 'icon-opacity';
+        break;
+      case 'fill':
+        opacityProperty = 'fill-opacity';
+        break;
+      case 'circle':
+        opacityProperty = 'circle-opacity';
+        break;
+      case 'raster':
+        opacityProperty = 'raster-opacity';
+        break;
+      case 'line':
+        opacityProperty = 'line-opacity';
+        break;
+      default:
+        opacityProperty = null;
+    }
+
+    // 4. Add layer if it doesn't exist yet
+    if (!map.getLayer(layerId)) {
+      const saved = savedLayerOpacities[layerId];
+      let paintProps = { ...(layerDef.paint || {}) };
+      if (saved && saved.opacityProperty === opacityProperty) {
+        paintProps[opacityProperty] = saved.value;
+      }
+
+      const layoutProps = layerDef.layout ? { ...layerDef.layout } : {};
+      if (layerDef.type === 'symbol') {
+        layoutProps['icon-allow-overlap'] = true;
+      }
+
+	const newLayer = {
+	  id: layerId,
+	  type: layerDef.type,
+	  source: layerDef.source.id,
+	  'source-layer': layerDef['source-layer'],
+	  layout: layoutProps,
+	  paint: paintProps
+	};
+
+	//  Add minzoom/maxzoom if defined
+	if (typeof layerDef.minzoom === 'number') {
+	  newLayer.minzoom = layerDef.minzoom;
+	}
+	if (typeof layerDef.maxzoom === 'number') {
+	  newLayer.maxzoom = layerDef.maxzoom;
+	}
+
+	map.addLayer(newLayer);
+
+    }
+  }
+
+  // Clear saved opacities
+  for (const key in savedLayerOpacities) {
+    delete savedLayerOpacities[key];
+  }
+
+  // Apply zoom-based visibility after all layers are re-added
+  requestAnimationFrame(() => {
+    applyZoomVisibility();
+  });
+});
+
+
+
+
+
+
+
+map.on('error', (e) => {
+  if (e && e.error && e.error.message) {
+    console.warn('Mapbox tile load error:', e.error.message);
+  }
+});
+
+
+function loadSvgAsImage(iconurl, iconimage, callback) {
+  fetch(iconurl)
+    .then(response => response.text())
+    .then(svgText => {
+      const svgBlob = new Blob([svgText], { type: 'image/svg+xml' });
+      const DOMURL = window.URL || window.webkitURL || window;
+      const url = DOMURL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.onload = function () {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+
+        map.addImage(iconimage, {
+          width: img.width,
+          height: img.height,
+          data: imageData.data
+        }, { sdf: true });
+
+        if (map.hasImage(iconimage)) {
+          console.log(`Icon '${iconimage}' is present in the map style.`);
+        } else {
+          console.warn(`Icon '${iconimage}' is NOT present in the map style.`);
+        }
+
+        if (callback) callback();
+
+        DOMURL.revokeObjectURL(url);
+      };
+
+      img.onerror = function () {
+        console.error("Failed to load SVG image from", url);
+        DOMURL.revokeObjectURL(url);
+      };
+
+      img.src = url;
+    })
+    .catch(err => console.error("Failed to fetch SVG:", err));
+}
+
+
+
+
+</script>
+</body>
+</html>
+
+
+
+
+<!-- NOTES
+
+https://support.squarespace.com/hc/en-us/articles/206543167-Code-blocks
+The above link may contain useful information, though I figured most everything out using ChatGPT 
+ 
+"ypsirecpark_20250509_squarespace_1_WORKS.html" and other later Ypsi Rec Park scripts contain code for incorporating and sizing 
+an image into a popup when a user clicks a feature (e.g. parcel).  Refer to the map.on('click' block of the script.
+ 
+ -->
